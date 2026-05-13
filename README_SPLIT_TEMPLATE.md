@@ -1,0 +1,188 @@
+[![Snakemake](https://img.shields.io/badge/snakemake-≥9.0.0-brightgreen.svg?style=flat)](https://snakemake.readthedocs.io)
+![CodeRabbit Pull Request Reviews](https://img.shields.io/coderabbit/prs/github/bdsc-tds/xenium_analysis_pipeline?utm_source=oss&utm_medium=github&utm_campaign=bdsc-tds%2Fxenium_analysis_pipeline&labelColor=171717&color=FF570A&link=https%3A%2F%2Fcoderabbit.ai&label=CodeRabbit+Reviews)
+
+# xenium_analysis_pipeline
+
+## Reproducibility
+
+This workflow is developed with reproducibility bearing in mind. Please refer to the following section for more details.
+
+> **_Note_**: The pipeline we used in the [paper](https://www.biorxiv.org/content/10.1101/2025.04.23.649965v1) is available with tag v1.0.
+
+## Installation
+
+### Snakemake
+
+We use [Snakemake (v9+)](https://snakemake.github.io) as the backend to this workflow. Thus, a conda environment for Snakemake must be created in the first step. We recommend [mamba](https://mamba.readthedocs.io/en/latest/index.html) as a replacement to conda for environment management.
+
+Using `reproducibility/environment.yml`, we can create an environment for Snakemake:
+
+```bash
+# the current working directory is the root of this repo
+# Alternative: `conda`
+mamba env create --use-uv -y -f reproducibility/environment.yml
+```
+
+> **_Note_**: If you are using mamba < 2.3.3 or conda, please drop `--use-uv`.
+
+### Singularity containers
+
+We use multiple singularity containers for different methods and / or environments. To ensure reproducibility, please build these containers before executing the workflow.
+
+#### R
+
+The R version we use for this workflow is 4.4.2, and [renv](https://rstudio.github.io/renv/index.html) is used to track specific versions of packages. Please find files related to renv in `reproducibility/r/metadata`, and use `r.def` in `reproducibility/r` to build the corresponding container:
+
+```bash
+# the current working directory is the root of this repo
+cd reproducibility/r
+singularity build --fakeroot --force /path/to/the/built/container r.def
+```
+
+#### 10X Xenium Ranger
+
+The 10X Xenium Ranger version we use here is 4.0.0. A link is used to download the software from the [10X website](https://www.10xgenomics.com/support/software/xenium-ranger/downloads). Since 10X regularly updates this link, users should replace it with the most recent one if the container fails to be built:
+
+```bash
+# the current working directory is the root of this repo
+singularity build --fakeroot --force /path/to/the/built/container reproducibility/10x.def
+```
+
+#### Baysor
+
+The [Baysor](https://github.com/kharchenkolab/Baysor) version we use here is 0.7.0.
+
+```bash
+# the current working directory is the root of this repo
+singularity build --fakeroot --force /path/to/the/built/container reproducibility/baysor.def
+```
+
+#### Proseg
+
+The [Proseg](https://https://github.com/dcjones/proseg) version we use here is 3.0.10.
+
+```bash
+# the current working directory is the root of this repo
+singularity build --fakeroot --force /path/to/the/built/container reproducibility/proseg.def
+```
+
+#### Segger
+
+The [Segger](https://github.com/EliHei2/segger_dev) version we use here is a [fix](https://github.com/senbaikang/segger_dev/tree/96e531dd7313dfe9c19111b029b49e582531044f) by us.
+
+```bash
+# the current working directory is the root of this repo
+cd reproducibility/segger
+singularity build --fakeroot --force /path/to/the/built/container segger.def
+```
+
+## Configuration
+
+### Configuration for the workflow
+
+Please edit `config/config.yml` for the configuration of the workflow. A detailed guideline can be found in `config/README.md`.
+
+### Configuration for execution
+
+We have developed a bash script, `run.sh`, to make the execution easy for users. Before execution, users need to configure a few entries in it under _USER SETUP_ section.
+
+- `MODULES`: Modules to be loaded prior to execution on clusters.
+
+- `CONDA_BIN`: The name of or path to either `mamba` or `conda`.
+
+- `ENV_NAME`: The name of or path to the conda environment (by default `xenium_analysis_pipeline`).
+
+- `LOCAL_PROFILE` and `CLUSTER_PROFILE`:
+  The execution of this workflow is controlled by profiles. Please refer to [the Snakemake manuel](https://snakemake.readthedocs.io/en/stable/executing/cli.html#profiles) for the details.
+
+  We have provided two examples of profiles under `profiles`. One is for local execution, which locates in `profiles/local`; the other is for cluster execution, specifically slurm, which locates in `profiles/slurm`. Users can edit these profiles according to their specific needs.
+
+  Besides, users can define their own profiles for execution, e.g., when they use a cluster other than slurm. They only need to specify in proper places the paths to their customised profiles.
+
+- `SINGULARITY_BIND_DIRS`: An array of directories to bind to containers. Each element should be in the following form: _LOCAL_DIR:SINGULARITY_DIR_. Inexistent local directories will be filtered out.
+
+- `SNAKEMAKE_CACHE_DIR`: A directory used to store cache of Snakemake. Internally it overwrite the `XDG_CACHE_HOME` environment variable if it is set by users.
+
+## Execution
+
+The workflow should be executed from the root directory of this repo. To get a self-explanatory help message, type
+
+```bash
+# the current working directory is the root of this repo
+./run.sh --help
+```
+
+which prints
+
+```
+Usage: [ -m | --mode MODE ] [ -c | --core CORE ] [ -j | --jobs JOBS ] [ --retries RETRIES ] [ -n | --dry-run ] [ -R | --forcerun RULE ] [ -U | --until RULE ] [ --dag OUTPUT ] [ --unlock ] [ -v | --verbose ] [ -h | --help ]
+        -m,--mode MODE: the pipeline will be run on 'local' (default) or on 'cluster'.
+        -c,--core CORE: the number of cores to be used when -m,--mode is unset or 'local' (default: 1); ignored when -m,--mode is 'cluster'.
+        -j,--jobs JOBS: the number of jobs submitted to the cluster at the same time when -m,--mode is 'cluster'. (default: 500).
+        --retries RETRIES: the number of retries for failed jobs. (default: 0).
+        -n,--dry-run: dry run.
+        -R,--forcerun RULE: force the re-execution or creation of the given rule or file. Repeat this option multile times for multiple rules or files.
+        -U,--until RULE: runs the pipeline until it finishes the specified rule or generated the file. Repeat this option multile times for multiple rules or files.
+        --dag OUTPUT: draw dag and save to OUTPUT.pdf.
+        --unlock: unlock the working directory.
+        -v,--verbose: print more information.
+        -h,--help: print this message.
+```
+
+> **_Note_**: Execution logging via [snkmt](https://github.com/cademirch/snakemake-logger-plugin-snkmt) is always enabled. The log database is stored at `${output_path}/snkmt.db` (where `output_path` is read from `config/config.yml`). To monitor the pipeline execution, run:
+>
+> ```bash
+> mamba run -n xenium_analysis_pipeline snkmt console --db-path ${output_path}/snkmt.db
+> ```
+
+### Typical commands
+
+- Draw the DAG
+
+```bash
+./run.sh --dag dag
+```
+
+- Dry-run
+
+```bash
+./run.sh -n
+```
+
+- Run on cluster
+
+```bash
+./run.sh -m cluster
+```
+
+- Run until a specific rule
+
+```bash
+./run.sh -m cluster -U rule_name
+```
+
+- Run on cluster with retries
+
+```bash
+./run.sh -m cluster --retries 2
+```
+
+## Other files included in this repo
+
+There are some other files related to Xenium data analysis, residing in `notebooks`. Please refer to the documentation inside for more details.
+
+## Solutions to known problems
+
+1. Snakemake fails to create conda environments due to the lack of writing permission of `/tmp/conda`.
+
+   Such an issue occurs most often on devices with multiple users, such as HPCs and servers. In this case, the reason is simply that `/tmp/conda` is possessed by other users. A possible solution is to firstly create a folder in `/tmp`, such as `/tmp/your_id`, and then add `/tmp/your_id:/tmp` to `SINGULARITY_BIND_DIRS` inside `run.sh`. After this you can rerun the command, and those environments should be correctly created.
+
+   Additionally, for HPCs, users might need to remove `/tmp/your_id:/tmp` from `SINGULARITY_BIND_DIRS` after creating environments as directory `/tmp/your_id` is not likely present in compute nodes.
+
+2. For those steps involving 10X xeniumranger, sometimes I get the folowing error: "PermissionError: [Errno 13] Permission denied".
+
+   10X xeniumranger copies files from raw data during processing. This error could be because the user, as the owner of the raw data, deprives him-/herself of write permission to it. When 10X xeniumranger conducts copy operation, it also copies the modes of files, and hence this error when it needs to write to the copied files. Although it is a safe behaviour to prevent from accidental change of the raw data, users have to have write permission to the raw data when they are also the owner.
+
+## Original manuscript analyses
+
+Code to reproduce analyses from the original manuscript can be found at <https://github.com/bdsc-tds/Bilous2025>

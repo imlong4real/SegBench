@@ -1,0 +1,164 @@
+# =========================================================================
+# TSU-20 real-tool run.
+# =========================================================================
+# Drives workflow/Snakefile_benchmark with TRACER intentionally DISABLED and
+# every non-TRACER tool enabled. Stubs are NOT allowed by default —
+# wrappers must produce real outputs or fail loudly.
+# =========================================================================
+
+dataset:
+  name: tsu20_tools
+  xenium_dir: dataset/lung_cancer_xenium_10x/TSU-20
+  output_dir: results/tsu20_tools
+  qv_threshold: 30
+  threads: 8
+
+  roi:
+    x_min: null
+    x_max: null
+    y_min: null
+    y_max: null
+
+  max_transcripts: null
+
+  # Temporary cellAdmix labels — Xenium graphclust clusters.csv. Replace
+  # later with proper cell-type labels (e.g. RCTD or finetuned).
+  cluster_labels: dataset/lung_cancer_xenium_10x/TSU-20/analysis/clustering/gene_expression_graphclust/clusters.csv
+
+  # Convenience pointers to per-file Xenium artifacts (used by some scripts).
+  files:
+    transcripts_parquet: dataset/lung_cancer_xenium_10x/TSU-20/transcripts.parquet
+    transcripts_csv_gz: dataset/lung_cancer_xenium_10x/TSU-20/transcripts.csv.gz
+    cells_parquet: dataset/lung_cancer_xenium_10x/TSU-20/cells.parquet
+    cell_boundaries_parquet: dataset/lung_cancer_xenium_10x/TSU-20/cell_boundaries.parquet
+    nucleus_boundaries_parquet: dataset/lung_cancer_xenium_10x/TSU-20/nucleus_boundaries.parquet
+    cell_feature_matrix_h5: dataset/lung_cancer_xenium_10x/TSU-20/cell_feature_matrix.h5
+    cell_feature_matrix_dir: dataset/lung_cancer_xenium_10x/TSU-20/cell_feature_matrix
+    gene_panel_json: dataset/lung_cancer_xenium_10x/TSU-20/gene_panel.json
+
+methods:
+  xenium_default: true
+  baysor: true
+  proseg: true
+  segger: true              # required by spec; runtime will fail loudly (no CUDA on host)
+
+  # TRACER — intentionally disabled for this run.
+  tracer_xenium_default: false
+  tracer_baysor: false
+  tracer_proseg: false
+  tracer_segger: false
+
+  # Profile correction methods.
+  split_xenium_default: true                # will fail loudly without RCTD object
+  split_tracer_xenium_default: false        # TRACER disabled
+  celladmix_xenium_default: true
+  celladmix_tracer_xenium_default: false    # TRACER disabled
+
+  ovrlpy: true
+
+# -------------------------------------------------------------------------
+# TRACER — disabled. Kept for schema compatibility only.
+# -------------------------------------------------------------------------
+tracer:
+  repo_path: null
+  mode: refine_existing_segmentation
+  enable_seg_residual_cascade: false
+  enable_noseg_cascade: false
+  npmi_source: panel_or_reference
+  gene_panel: dataset/lung_cancer_xenium_10x/TSU-20/gene_panel.json
+  npmi_path: null
+  allow_stub: false
+
+# -------------------------------------------------------------------------
+# Baysor — version pinned to the SPLIT template (0.7.0).
+# -------------------------------------------------------------------------
+baysor:
+  version: "0.7.0"
+  config_toml: workflow/configs/baysor_xenium.toml
+  threads: 4
+  memory_gb: 16
+  raw_output_dir: results/tsu20_tools/baysor/raw
+
+# -------------------------------------------------------------------------
+# Proseg — version pinned to the SPLIT template (3.0.10).
+# -------------------------------------------------------------------------
+proseg:
+  version: "3.0.10"
+  threads: 4
+  raw_output_dir: results/tsu20_tools/proseg/raw
+
+# -------------------------------------------------------------------------
+# Segger — documented as blocked on this host (no CUDA).
+# -------------------------------------------------------------------------
+segger:
+  version: "senbaikang/segger_dev@96e531d"
+  threads: 4
+  raw_output_dir: results/tsu20_tools/segger/raw
+  requires_cuda: true
+
+# -------------------------------------------------------------------------
+# ovrlpy
+# -------------------------------------------------------------------------
+ovrlpy:
+  signal_integrity_threshold: 0.5
+  cell_diameter: 10
+  n_expected_celltypes: 30
+  allow_stub: false
+
+# -------------------------------------------------------------------------
+# cellAdmix
+# -------------------------------------------------------------------------
+celladmix:
+  repo_path: null               # null => install from GitHub via remotes
+  github: "kharchenkolab/cellAdmix"
+  min_cells_per_cluster: 25
+  admixture_threshold: 0.1
+  allow_stub: false
+  # Document where the labels came from (also written to method_info.json).
+  cluster_labels_source: xenium_graphclust_temporary
+
+# -------------------------------------------------------------------------
+# SPLIT
+# -------------------------------------------------------------------------
+split:
+  # MUST be set to a real RCTD post-processed RDS (doublet-mode).
+  # If null, the wrapper exits non-zero with a clear, actionable error.
+  rctd_post_processed_rds: null
+  allow_stub: false
+  notes: |
+    SPLIT consumes a post-processed RCTD doublet-mode object produced by
+    the original pipeline (workflow/rules/_cell_type_annotation/_reference_based/rctd.smk
+    + workflow/scripts/_cell_type_annotation/_reference_based/rctd.R), which
+    in turn requires a single-cell reference. Neither the RCTD RDS nor the
+    reference is in this repo. To run SPLIT, either:
+      1. point `split.rctd_post_processed_rds` at an existing RDS, or
+      2. run the original SPLIT pipeline's RCTD rule on this sample with a
+         valid reference, then re-run the benchmark.
+
+# -------------------------------------------------------------------------
+# Metrics (NPMI/marker) — kept so existing benchmark targets remain valid.
+# -------------------------------------------------------------------------
+metrics:
+  marker_set: resources/marker_sets/lung_cancer_markers.yml
+  npmi:
+    window_radius_um: 20
+    min_molecules_per_cell: 10
+
+# -------------------------------------------------------------------------
+# Outputs
+# -------------------------------------------------------------------------
+outputs:
+  standardized_dir: results/tsu20_tools/standardized
+  metrics_dir: results/tsu20_tools/metrics
+  figures_dir: results/tsu20_tools/figures
+  summary_dir: results/tsu20_tools/summary
+
+# -------------------------------------------------------------------------
+# Containers — not used on macOS arm64 (no Singularity available).
+# -------------------------------------------------------------------------
+containers:
+  python_cuda: null
+  r: null
+  "10x": null
+  baysor: null
+  proseg: null

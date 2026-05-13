@@ -1,0 +1,352 @@
+# Segmentation benchmark pipeline (TSU-20 real-tool run)
+
+This repository drives **real-tool execution** of the major spatial-transcriptomics
+segmentation and count-correction methods on a single Xenium sample
+(`dataset/lung_cancer_xenium_10x/TSU-20`). It is built on the inherited
+SPLIT Xenium analysis pipeline (`workflow/Snakefile`) plus a lightweight
+benchmark layer (`workflow/Snakefile_benchmark`).
+
+> **TRACER is intentionally disabled in this configuration.** All
+> `tracer_*` rules in `workflow/configs/tsu20_tools.yml` are set to
+> `false`. No TRACER stub runs are produced.
+>
+> Stubs are **off by default** everywhere in this repo. Wrappers either
+> run the real tool or fail loudly with an actionable error.
+
+---
+
+## 1. Repo layout
+
+```
+.
+├── README.md                            ← this file (real-tool run)
+├── README_SPLIT_TEMPLATE.md             ← upstream SPLIT template (versions/build refs)
+├── .gitignore                           ← excludes dataset/ results/ logs/ etc.
+├── docs/
+│   ├── pipeline_map.md                  ← Phase 0 inspection map (original SPLIT pipeline)
+│   └── run_tools_plan.md                ← per-tool feasibility on this host
+├── config_split_original/               ← original SPLIT configs (read-only reference)
+├── dataset/                             ← *not tracked* — Xenium bundle(s)
+├── reproducibility/                     ← Singularity .def files (Linux-only build target)
+├── resources/marker_sets/               ← benchmark marker sets (unchanged by this run)
+├── results/                             ← *not tracked* — every run output
+└── workflow/
+    ├── Snakefile                        ← original SPLIT pipeline (unchanged)
+    ├── Snakefile_benchmark              ← thin benchmark driver
+    ├── configs/
+    │   ├── tsu20_tools.yml              ← this run's config (TRACER off, real tools on)
+    │   ├── benchmark_lung_tiny.yml      ← smoke test only (allow_stub:true here)
+    │   └── benchmark_lung_small.yml
+    ├── envs/                            ← conda envs
+    ├── rules/                           ← original + _benchmark/ rules
+    └── scripts/                         ← original + _benchmark/ scripts
+```
+
+---
+
+## 2. Host & dependency setup
+
+This run was developed on **macOS 14, arm64 (Apple Silicon)** with no
+Singularity/Apptainer and no GPU. The exact install steps used here:
+
+```bash
+# 1. Snakemake (pip → installs to ~/.local/bin)
+/Users/lyuan13/anaconda3/bin/pip install --user "snakemake>=9.0,<10"
+~/.local/bin/snakemake --version          # 9.20.0
+
+# 2. Proseg 3.0.10 via cargo
+cargo install proseg --version 3.0.10 --locked
+
+# 3. Baysor 0.7.0 via Julia (from source — no macOS prebuilt binary exists)
+julia -e 'using Pkg; Pkg.add(PackageSpec(url="https://github.com/kharchenkolab/Baysor.git", rev="v0.7.0")); Pkg.build("Baysor")'
+
+# 4. ovrlpy 1.1.0 in a clean Python 3.11 conda env
+/Users/lyuan13/anaconda3/bin/conda create -n tracer_benchmark_ovrlpy -y -c conda-forge python=3.11 numpy pandas pyarrow
+conda run -n tracer_benchmark_ovrlpy pip install ovrlpy
+
+# 5. R 4.4 + arrow/Matrix/jsonlite/optparse/devtools/remotes in another conda env
+/Users/lyuan13/anaconda3/bin/conda create -n tracer_benchmark_r -y -c conda-forge \
+  r-base=4.4 r-matrix r-arrow r-jsonlite r-optparse r-remotes r-devtools
+
+# 6. cellAdmix from GitHub (kharchenkolab/cellAdmix) into the R env
+conda run -n tracer_benchmark_r R -e 'remotes::install_github("kharchenkolab/cellAdmix", upgrade="never")'
+
+# 7. SPLIT (R) + spacexr — only needed if running SPLIT (see §6).
+```
+
+The original SPLIT pipeline canonical install uses Singularity and
+`reproducibility/environment.yml`. See `README_SPLIT_TEMPLATE.md` for that
+path. It cannot be reproduced unmodified on macOS.
+
+---
+
+## 3. Per-tool status on this host
+
+See `docs/run_tools_plan.md` for the detailed plan. Outcome summary:
+
+| Tool | Status on macOS arm64 | Stub | Output |
+|------|-----------------------|------|--------|
+| **Xenium default** | ✅ run | no | `results/tsu20_tools/standardized/xenium_default/` |
+| **Baysor** 0.7.0 | 🟡 install in progress (Julia source build) | no | `results/tsu20_tools/baysor/raw/segmentation.csv` (after run) |
+| **Proseg** 3.0.10 | 🟡 run in progress | no | `results/tsu20_tools/proseg/raw/*.csv.gz` (after run) |
+| **Segger** | ❌ BLOCKED (no CUDA, no GPU, no Singularity) | no | `results/tsu20_tools/segger/raw/method_info.json` records the blocker |
+| **ovrlpy** 1.1.0 | 🟡 run in progress (new API wrapper) | no | `results/tsu20_tools/ovrlpy_xenium_default/` |
+| **cellAdmix** | 🟡 install in progress | no | `results/tsu20_tools/celladmix_xenium_default/` (after run) |
+| **SPLIT** | ❌ BLOCKED (no RCTD post-processed RDS, no reference) | no | `results/tsu20_tools/split_xenium_default/method_info.json` records the blocker |
+
+> **TRACER**: intentionally disabled. Not in scope for this run.
+
+The actual current verdict per tool is canonical at
+`results/tsu20_tools/summary/tool_output_validation.csv` (regenerated by
+`workflow/scripts/_benchmark/validate_tool_outputs.py`).
+
+---
+
+## 4. Run commands
+
+### Dry run
+
+```bash
+~/.local/bin/snakemake -n \
+  -s workflow/Snakefile_benchmark \
+  --configfile workflow/configs/tsu20_tools.yml \
+  --cores 8
+```
+
+### Run each tool individually
+
+```bash
+# Xenium default — reads the bundle directly; no segmentation runs.
+/Users/lyuan13/anaconda3/bin/python3 workflow/scripts/_benchmark/standardize_method_output.py \
+  --method xenium_default \
+  --xenium-dir dataset/lung_cancer_xenium_10x/TSU-20 \
+  --out-dir results/tsu20_tools/standardized/xenium_default \
+  --qv-threshold 30 --threads 8 \
+  --log results/tsu20_tools/logs/standardize_xenium_default.log
+
+# Proseg 3.0.10 (raw segmentation; the Xenium-Ranger-based normaliseProseg
+# step from the original SPLIT pipeline is not runnable on this host).
+mkdir -p results/tsu20_tools/proseg/raw && cd results/tsu20_tools/proseg/raw && \
+  ~/.cargo/bin/proseg --nthreads 4 \
+    --output-counts counts.mtx.gz \
+    --output-expected-counts expected-counts.mtx.gz \
+    --output-cell-metadata cell-metadata.csv.gz \
+    --output-transcript-metadata transcript-metadata.csv.gz \
+    --output-gene-metadata gene-metadata.csv.gz \
+    --output-cell-polygons cell-polygons.geojson.gz \
+    --output-cell-polygon-layers cell-polygons-layers.geojson.gz \
+    --xenium $REPO/dataset/lung_cancer_xenium_10x/TSU-20/transcripts.parquet
+
+# Standardize proseg output:
+/Users/lyuan13/anaconda3/bin/python3 workflow/scripts/_benchmark/standardize_method_output.py \
+  --method proseg \
+  --proseg-transcript-metadata results/tsu20_tools/proseg/raw/transcript-metadata.csv.gz \
+  --out-dir results/tsu20_tools/standardized/proseg \
+  --qv-threshold 30 --threads 8 \
+  --log results/tsu20_tools/logs/standardize_proseg.log
+
+# Baysor 0.7.0
+mkdir -p results/tsu20_tools/baysor/raw && cd results/tsu20_tools/baysor/raw && \
+  julia -e 'using Baysor; Baysor.command_main(["run","-c","'"$REPO"'/workflow/configs/baysor_xenium.toml","'"$REPO"'/dataset/lung_cancer_xenium_10x/TSU-20/transcripts.parquet",":cell_id"])'
+# Standardize baysor output:
+/Users/lyuan13/anaconda3/bin/python3 workflow/scripts/_benchmark/standardize_method_output.py \
+  --method baysor \
+  --baysor-segmentation-csv results/tsu20_tools/baysor/raw/segmentation.csv \
+  --xenium-dir dataset/lung_cancer_xenium_10x/TSU-20 \
+  --out-dir results/tsu20_tools/standardized/baysor \
+  --qv-threshold 30 --threads 8 \
+  --log results/tsu20_tools/logs/standardize_baysor.log
+
+# Segger — BLOCKED on this host. Documented at:
+#   results/tsu20_tools/segger/raw/method_info.json
+# Unblock by running on a Linux + CUDA + Singularity host (see Troubleshooting).
+
+# ovrlpy 1.1 (operates on standardized xenium_default transcripts)
+conda run -n tracer_benchmark_ovrlpy python workflow/scripts/_benchmark/run_ovrlpy_benchmark.py \
+  --standardized-dir results/tsu20_tools/standardized/xenium_default \
+  --out-dir          results/tsu20_tools/ovrlpy_xenium_default \
+  --cell-diameter 10 --n-expected-celltypes 30 \
+  --log results/tsu20_tools/logs/ovrlpy_xenium_default.log
+
+# cellAdmix (uses Xenium graphclust clusters.csv as TEMPORARY labels)
+conda run -n tracer_benchmark_r Rscript workflow/scripts/_benchmark/run_celladmix.R \
+  --standardized-dir results/tsu20_tools/standardized/xenium_default \
+  --out-dir         results/tsu20_tools/celladmix_xenium_default \
+  --base-method xenium_default \
+  --cluster-labels  dataset/lung_cancer_xenium_10x/TSU-20/analysis/clustering/gene_expression_graphclust/clusters.csv \
+  --admixture-threshold 0.1 --min-cells-per-cluster 25 \
+  --log results/tsu20_tools/logs/celladmix_xenium_default.log
+
+# SPLIT — fails without --rctd-rds. By design, no stub.
+conda run -n tracer_benchmark_r Rscript workflow/scripts/_benchmark/run_split_benchmark.R \
+  --standardized-dir results/tsu20_tools/standardized/xenium_default \
+  --out-dir          results/tsu20_tools/split_xenium_default \
+  --base-method xenium_default \
+  --rctd-rds /path/to/post_processed_output.rds \
+  --log results/tsu20_tools/logs/split_xenium_default.log
+```
+
+### Validate all outputs
+
+```bash
+/Users/lyuan13/anaconda3/bin/python3 workflow/scripts/_benchmark/validate_tool_outputs.py \
+  --results results/tsu20_tools
+# writes results/tsu20_tools/summary/tool_output_validation.csv
+```
+
+### Run everything Snakemake can schedule
+
+```bash
+~/.local/bin/snakemake \
+  -s workflow/Snakefile_benchmark \
+  --configfile workflow/configs/tsu20_tools.yml \
+  --cores 8 --use-conda \
+  results/tsu20_tools/summary/metrics_all_methods.csv
+```
+
+(Note: methods that are `false` in `tsu20_tools.yml :: methods` are
+skipped; methods that fail loudly produce a non-stub method_info.json
+recording the blocker.)
+
+---
+
+## 5. cellAdmix caveat — temporary cluster labels
+
+cellAdmix requires per-cell labels. This run uses Xenium's **unsupervised
+graphclust** assignments from
+`dataset/lung_cancer_xenium_10x/TSU-20/analysis/clustering/gene_expression_graphclust/clusters.csv`
+as a **temporary stand-in**. Replace with finetuned labels (e.g. RCTD or a
+matched single-cell atlas) before reporting any biological conclusions.
+
+The wrapper auto-detects the Xenium `Barcode,Cluster` header and renames
+to `cell_id_method,cluster`; it also records the source
+(`extra.cluster_labels_source = xenium_graphclust_temporary`) in
+`method_info.json`.
+
+---
+
+## 6. SPLIT caveat — RCTD requirement
+
+SPLIT consumes a **post-processed RCTD doublet-mode** object. The repo
+does not ship either:
+
+- a single-cell reference, nor
+- a pre-computed `post_processed_output.rds`.
+
+The SPLIT wrapper therefore fails *loudly* (no stub):
+
+```
+Error: SPLIT requires --rctd-rds pointing to a valid post-processed RCTD RDS.
+       Rerun with --allow-stub if you want to ignore this requirement.
+Execution halted
+```
+
+This is recorded as a structured BLOCKED record at
+`results/tsu20_tools/split_xenium_default/method_info.json`, including
+the rule path, expected file name, expected config key, and three options
+to unblock (run the original RCTD chain with a reference, run RCTD
+externally, or reuse an existing RCTD object).
+
+---
+
+## 7. Container / Singularity build
+
+The original SPLIT pipeline builds containers from the `reproducibility/`
+`.def` files on a Linux host with Singularity. Quoting
+`README_SPLIT_TEMPLATE.md`:
+
+```bash
+singularity build --fakeroot --force /path/to/the/built/container reproducibility/10x.def
+singularity build --fakeroot --force /path/to/the/built/container reproducibility/baysor.def
+singularity build --fakeroot --force /path/to/the/built/container reproducibility/proseg.def
+cd reproducibility/segger && singularity build --fakeroot --force /path/to/the/built/container segger.def
+cd reproducibility/r      && singularity build --fakeroot --force /path/to/the/built/container r.def
+```
+
+None of these can be built on macOS — Singularity needs Linux. On this
+host we substitute native installs (Julia for Baysor, cargo for Proseg)
+and conda envs (`tracer_benchmark_ovrlpy`, `tracer_benchmark_r`).
+
+---
+
+## 8. Output directory structure
+
+```
+results/tsu20_tools/
+  standardized/
+    xenium_default/
+      transcripts.parquet
+      cells.parquet
+      cell_by_gene.mtx
+      cell_by_gene_barcodes.tsv
+      cell_by_gene_features.tsv
+      cell_metadata.parquet
+      method_info.json
+    baysor/          # populated after Baysor run
+    proseg/          # populated after Proseg run
+  baysor/raw/segmentation.csv                                  # raw Baysor
+  proseg/raw/{counts,expected-counts,...}.{mtx,csv}.gz         # raw Proseg
+  segger/raw/method_info.json                                  # BLOCKED record
+  ovrlpy_xenium_default/{signal_integrity,signal_strength,cell_signal_integrity,pseudocell_summary}.parquet
+  celladmix_xenium_default/{corrected_counts.mtx,cell_metadata.parquet,method_info.json}
+  split_xenium_default/method_info.json                        # BLOCKED record
+  logs/*.log
+  summary/tool_output_validation.csv
+```
+
+---
+
+## 9. Troubleshooting
+
+- **`snakemake: command not found`** — install with
+  `pip install --user "snakemake>=9.0,<10"` and ensure
+  `~/.local/bin` is on `$PATH`.
+- **`singularity: command not found` / no `apptainer`** — Singularity does
+  not run on macOS natively. Either run on a Linux host or use the
+  conda-only path documented in §2.
+- **Xenium Ranger download link changed** — `reproducibility/10x.def`
+  pins a specific Xenium Ranger version. If 10x rotates the URL, edit
+  the `.def` to use the latest link from
+  https://www.10xgenomics.com/support/software/xenium-ranger/downloads
+  and rebuild.
+- **Segger CUDA/container issue** — Segger is hard-requires CUDA + GPU.
+  The benchmark records a `status: BLOCKED` `method_info.json` instead
+  of a stub when GPU is missing.
+- **`spacexr` / RCTD missing** — `spacexr` is a GitHub-only R package.
+  Install with
+  `R -e 'remotes::install_github("dmcable/spacexr")'`
+  inside the `tracer_benchmark_r` env.
+- **cellAdmix missing labels** — set `dataset.cluster_labels` in
+  `workflow/configs/tsu20_tools.yml` to a CSV with `Barcode,Cluster` (or
+  `cell_id_method,cluster`). Xenium clusters.csv is auto-recognised.
+- **`ovrlpy` import error / dask circular import** — happens in mixed
+  anaconda envs with anndata + dask. Use the dedicated
+  `tracer_benchmark_ovrlpy` conda env documented in §2.
+- **Baysor build fails on macOS** — the SPLIT-template Baysor `.def`
+  fetches a Linux x86_64 prebuilt; on macOS we install Baysor 0.7.0 via
+  Julia's `Pkg.add(... rev="v0.7.0")`. Julia 1.10.x is required.
+
+---
+
+## 10. Gitignore note
+
+`dataset/`, `results/`, `logs/`, `.snakemake/`, `benchmark_results/`,
+`outputs/`, `*.sif`, `*.sqsh`, `__pycache__/`, `.DS_Store`, R/Python
+caches, and `.vscode/`/`.idea/` are all in `.gitignore` and are **not**
+tracked. The repo intentionally carries only code, configs, and docs.
+
+---
+
+## 11. Attribution
+
+This benchmark layer was adapted from the SPLIT Xenium analysis pipeline
+(`README_SPLIT_TEMPLATE.md`). Please cite the original methods if you
+report results:
+
+- SPLIT — https://github.com/bdsc-tds/SPLIT
+- Baysor — https://github.com/kharchenkolab/Baysor (v0.7.0)
+- Proseg — https://github.com/dcjones/proseg (v3.0.10)
+- Segger — https://github.com/EliHei2/segger_dev (fork `senbaikang/segger_dev@96e531d`)
+- cellAdmix — https://github.com/kharchenkolab/cellAdmix
+- ovrlpy — https://github.com/HiDiHlabs/ovrl.py (v1.1.0)
+- Xenium Ranger — 10x Genomics (v4.0.0 expected by template)

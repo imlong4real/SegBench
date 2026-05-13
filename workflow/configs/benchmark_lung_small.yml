@@ -1,0 +1,135 @@
+# =========================================================================
+# TRACER benchmark — small/full single-sample config
+# =========================================================================
+# This config drives the *benchmark layer* of the pipeline (Snakefile_benchmark).
+# It is intentionally simpler than `config_split_original/config.yml`, which
+# drives the full SPLIT Xenium pipeline. The benchmark layer reuses
+# segmentation rules from the original pipeline where appropriate but does
+# not require an experiments.yml.
+# -------------------------------------------------------------------------
+
+dataset:
+  name: lung_small
+  xenium_dir: dataset/lung_cancer_xenium_10x/TSU-20
+  output_dir: results/lung_small
+  qv_threshold: 30
+  threads: 8
+
+  # Optional: limit to a spatial ROI (microns). Leave null for full sample.
+  roi:
+    x_min: null
+    x_max: null
+    y_min: null
+    y_max: null
+
+  # Optional: limit the number of transcripts (after qv filter). null = all.
+  max_transcripts: null
+
+  # Optional: external Xenium 10x clustering labels used by cellAdmix.
+  # Path is relative to repo root. If null, cellAdmix will be disabled.
+  cluster_labels: dataset/lung_cancer_xenium_10x/TSU-20/analysis/clustering/gene_expression_graphclust/clusters.csv
+
+methods:
+  xenium_default: true
+  baysor: true
+  proseg: true
+  segger: true
+
+  tracer_xenium_default: true
+  tracer_baysor: true
+  tracer_proseg: true
+  tracer_segger: true
+
+  # Profile-correction methods (off by default; require RCTD / cell-types).
+  split_xenium_default: false
+  split_tracer_xenium_default: false
+  celladmix_xenium_default: false
+  celladmix_tracer_xenium_default: false
+
+  # Vertical-overlap QC.
+  ovrlpy: false
+
+# -------------------------------------------------------------------------
+# TRACER configuration
+# -------------------------------------------------------------------------
+tracer:
+  # Local checkout of the TRACER repo (will be added to PYTHONPATH at runtime).
+  # If null, TRACER must be importable from the active python env.
+  repo_path: /Users/lyuan13/Desktop/TRACER
+
+  # 'refine_existing_segmentation' wraps an existing transcript→cell map.
+  # Other supported modes (see TRACER docs): 'noseg_cascade', 'seg_residual_cascade'.
+  mode: refine_existing_segmentation
+  enable_seg_residual_cascade: true
+  enable_noseg_cascade: false
+
+  # 'panel_or_reference' uses the gene panel; alternatives include
+  # 'precomputed' (provide a path) or 'on_the_fly'.
+  npmi_source: panel_or_reference
+  gene_panel: dataset/lung_cancer_xenium_10x/TSU-20/gene_panel.json
+
+  # Optional: precomputed NPMI table (relative or absolute path).
+  npmi_path: null
+  # Real runs do NOT allow stubs. The smoke-test config sets this true.
+  allow_stub: false
+
+# -------------------------------------------------------------------------
+# cellAdmix configuration (R)
+# -------------------------------------------------------------------------
+celladmix:
+  # Where to find the cellAdmix R package. If null, expects it to be in R's library path.
+  repo_path: null
+  # Minimum cells per cluster considered.
+  min_cells_per_cluster: 25
+  # Threshold for admixture flagging.
+  admixture_threshold: 0.1
+
+# -------------------------------------------------------------------------
+# SPLIT configuration (benchmark-level wrapper)
+# -------------------------------------------------------------------------
+split:
+  # SPLIT requires RCTD doublet-mode results. If those aren't available,
+  # split_* methods will fail with a clear error.
+  rctd_post_processed_rds: null
+
+# -------------------------------------------------------------------------
+# ovrlpy configuration (benchmark-level wrapper)
+# -------------------------------------------------------------------------
+ovrlpy:
+  signal_integrity_threshold: 0.5
+  cell_diameter: 10
+  n_expected_celltypes: 30
+
+# -------------------------------------------------------------------------
+# Metrics
+# -------------------------------------------------------------------------
+metrics:
+  marker_set: resources/marker_sets/lung_cancer_markers.yml
+  npmi:
+    # Window radius for neighbour-pair NPMI in microns (used when computing
+    # purity / conflict). null => uses TRACER defaults.
+    window_radius_um: 20
+    # Minimum molecules per cell to include in purity stats.
+    min_molecules_per_cell: 10
+
+# -------------------------------------------------------------------------
+# Outputs
+# -------------------------------------------------------------------------
+outputs:
+  standardized_dir: results/lung_small/standardized
+  metrics_dir: results/lung_small/metrics
+  figures_dir: results/lung_small/figures
+  summary_dir: results/lung_small/summary
+
+# -------------------------------------------------------------------------
+# Containers / envs (optional; benchmark layer falls back to conda envs).
+# These are the same labels the original SPLIT pipeline uses, kept here so
+# `--use-singularity` invocations can resolve them when the user wires
+# concrete image paths in.
+# -------------------------------------------------------------------------
+containers:
+  python_cuda: null
+  r: null
+  "10x": null
+  baysor: null
+  proseg: null

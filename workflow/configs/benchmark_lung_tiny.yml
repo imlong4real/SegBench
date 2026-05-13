@@ -1,0 +1,91 @@
+# =========================================================================
+# TRACER benchmark — TINY smoke-test config
+# =========================================================================
+# Purpose: validate end-to-end pipeline structure on a tiny subset.
+# Runs only xenium_default + tracer_xenium_default + metrics + report.
+# All heavy / optional methods are disabled so the smoke test does not
+# require Baysor / Proseg / Segger / SPLIT / cellAdmix / ovrlpy environments.
+# -------------------------------------------------------------------------
+
+dataset:
+  name: lung_tiny
+  xenium_dir: dataset/lung_cancer_xenium_10x/TSU-20
+  output_dir: results/lung_tiny
+  qv_threshold: 30
+  threads: 4
+
+  # ROI is left null — tiny mode subsamples by transcript count instead.
+  roi:
+    x_min: null
+    x_max: null
+    y_min: null
+    y_max: null
+
+  # Cap transcripts to keep the test fast (first 100k after qv filter).
+  max_transcripts: 100000
+
+  cluster_labels: dataset/lung_cancer_xenium_10x/TSU-20/analysis/clustering/gene_expression_graphclust/clusters.csv
+
+methods:
+  xenium_default: true
+  baysor: false
+  proseg: false
+  segger: false
+
+  tracer_xenium_default: true
+  tracer_baysor: false
+  tracer_proseg: false
+  tracer_segger: false
+
+  split_xenium_default: false
+  split_tracer_xenium_default: false
+  celladmix_xenium_default: false
+  celladmix_tracer_xenium_default: false
+
+  ovrlpy: false
+
+tracer:
+  repo_path: /Users/lyuan13/Desktop/TRACER
+  mode: refine_existing_segmentation
+  enable_seg_residual_cascade: true
+  enable_noseg_cascade: false
+  npmi_source: panel_or_reference
+  gene_panel: dataset/lung_cancer_xenium_10x/TSU-20/gene_panel.json
+  npmi_path: null
+  # Smoke-test only: allow no-op fallback if TRACER can't be imported.
+  allow_stub: true
+
+celladmix:
+  repo_path: null
+  min_cells_per_cluster: 25
+  admixture_threshold: 0.1
+  allow_stub: true
+
+split:
+  rctd_post_processed_rds: null
+  allow_stub: true
+
+ovrlpy:
+  signal_integrity_threshold: 0.5
+  cell_diameter: 10
+  n_expected_celltypes: 30
+  allow_stub: true
+
+metrics:
+  marker_set: resources/marker_sets/lung_cancer_markers.yml
+  npmi:
+    window_radius_um: 20
+    min_molecules_per_cell: 10
+
+outputs:
+  standardized_dir: results/lung_tiny/standardized
+  metrics_dir: results/lung_tiny/metrics
+  figures_dir: results/lung_tiny/figures
+  summary_dir: results/lung_tiny/summary
+
+containers:
+  python_cuda: null
+  r: null
+  "10x": null
+  baysor: null
+  proseg: null

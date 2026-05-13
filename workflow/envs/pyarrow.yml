@@ -1,0 +1,8 @@
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12.7
+  - pyarrow=17.0.0
+  - numpy=2.2.2
+  - pandas=2.2.3
+  - scikit-learn=1.6.1

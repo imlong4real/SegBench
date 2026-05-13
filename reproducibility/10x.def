@@ -1,0 +1,65 @@
+BootStrap: docker
+From: condaforge/mambaforge:24.7.1-2
+Stage: conda
+
+BootStrap: docker
+From: mambaorg/micromamba:noble
+Stage: main
+
+%files from conda
+    /opt/conda /pkgs/conda
+
+%environment
+    export PATH=/opt/conda/bin:/opt/conda/condabin:$PATH
+    export MAMBA_ROOT_PREFIX=/opt/conda
+    export DEBIAN_FRONTEND=noninteractive
+    export TZ="Europe/Zurich"
+
+%post
+# Set up build time environment variables, such as versions
+    export XENIUM_RANGER_DOWNLOAD_LINK="https://cf.10xgenomics.com/releases/xeniumranger/xeniumranger-4.0.0.tar.gz?Expires=1761794968&Key-Pair-Id=APKAI7S6A5RYOXBWRPDA&Signature=N4cAr9K8jt-5U2qcYdzXQEbzWfYhzU-tT~EPhhJwBqNkwoaOAFOlf8rSQ~TiUZ-bl4X6qy258Vt0xDfOvb~Ogz2S3dSXCLkDwjQm5XCMyuFyjycxgSsc1ZNPLrHwczUbbiXdUkMD5mmZqTIWanJpvQehIuw-RXsEDsl7HQHvVupy5Dq0OD22Qqiohu7lAD6W9hFUtTs9dit1cNBOdYHKcqb-Hzi9GIFTVDTPzoUJkGWwh6DmDKq93ho9bnHtqVurZF2Vlq-vGnjh3TVEYi3EO-LEh0-Ve83UA21jisxNCA5FrBplOUNrabnvq9YqzNhh2voX0rL5ZBFNCyzboiQFgQ__"
+
+# Configure tzdata to prevent asking for input
+    export PATH=/opt/conda/bin:/opt/conda/condabin:$PATH
+    export MAMBA_ROOT_PREFIX=/opt/conda
+    export DEBIAN_FRONTEND=noninteractive
+    export TZ="Europe/Zurich"
+
+# Set sources.
+    sed -i 's/ch.archive.ubuntu.com/en.archive.ubuntu.com/g' /etc/apt/sources.list
+
+# Force ipv4
+    echo 'Acquire::ForceIPv4 "true";' | tee /etc/apt/apt.conf.d/99force-ipv4
+
+# Setup locales.
+    apt update
+    apt install -y locales gnupg-agent
+    sed -i '/^#.* en_.*.UTF-8 /s/^#//' /etc/locale.gen
+    locale-gen
+
+# Install essential packages.
+    apt install -y --no-install-recommends software-properties-common dirmngr apt-transport-https ca-certificates build-essential
+
+# Install system packages
+    apt-get install -y vim tar curl xz-utils
+    apt clean
+
+# Change to directories for packages
+    cd /opt
+
+# Put conda binaries to the right directory.
+    rm -rf conda
+    mv /pkgs/conda /opt
+    rm -rf /pkgs
+
+# Download Xenium Ranger.
+    curl -o xeniumranger.tar.xz "${XENIUM_RANGER_DOWNLOAD_LINK}"
+
+    tar xf xeniumranger.tar.xz
+    rm xeniumranger.tar.xz
+
+    mv xeniumranger-xenium* xeniumranger-xenium
+    ln -s /opt/xeniumranger-xenium/bin/xeniumranger /usr/local/bin/xeniumranger
+
+# Back to root directory
+    cd ..

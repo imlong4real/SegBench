@@ -1,0 +1,47 @@
+# Marker sets for the TRACER lung-cancer benchmark.
+# Each group is a list of HGNC gene symbols expected to co-express in the
+# named cell type. Used by:
+#   - marker_specificity:  what fraction of a cell's marker counts come from
+#                          a single group?
+#   - marker_leakage:      what fraction of "wrong-group" marker counts a
+#                          cell carries relative to its dominant group?
+#
+# Keep the marker lists short and high-confidence. Markers not present in the
+# gene panel are ignored at runtime.
+
+epithelial_tumor:
+  - EPCAM
+  - KRT8
+  - KRT18
+  - KRT19
+
+immune:
+  - PTPRC
+
+t_cell:
+  - CD3D
+  - CD3E
+  - CD2
+
+myeloid:
+  - LST1
+  - TYROBP
+  - FCER1G
+
+fibroblast:
+  - COL1A1
+  - COL1A2
+  - DCN
+
+endothelial:
+  - PECAM1
+  - VWF
+  - KDR
+
+pericyte:
+  - RGS5
+  - PDGFRB
+
+cycling:
+  - MKI67
+  - TOP2A

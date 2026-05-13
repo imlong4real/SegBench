@@ -1,0 +1,78 @@
+# =========================================================================
+# TRACER benchmark — entry point Snakefile.
+# =========================================================================
+# Invoke with:
+#   snakemake -s workflow/Snakefile_benchmark \
+#             --configfile workflow/configs/benchmark_lung_tiny.yml \
+#             --cores 4 --use-conda \
+#             results/lung_tiny/summary/metrics_all_methods.csv
+#
+# This file is intentionally separate from workflow/Snakefile (the original
+# SPLIT Xenium pipeline) so that the benchmark layer can run on a single
+# sample without dragging the full experiments.yml machinery.
+# =========================================================================
+
+import os
+
+# A benchmark config is required.
+if len(workflow.configfiles) == 0:
+    raise RuntimeError(
+        "No config file provided. Pass --configfile workflow/configs/benchmark_lung_tiny.yml "
+        "(or benchmark_lung_small.yml)."
+    )
+
+include: "rules/_benchmark/_common.smk"
+include: "rules/_benchmark/standardize.smk"
+include: "rules/_benchmark/tracer_refinement.smk"
+include: "rules/_benchmark/metrics.smk"
+include: "rules/_benchmark/celladmix.smk"
+include: "rules/_benchmark/split.smk"
+include: "rules/_benchmark/ovrlpy.smk"
+
+
+# ---------------------------------------------------------------------------
+# Aggregation
+# ---------------------------------------------------------------------------
+
+def benchmark_targets() -> list[str]:
+    targets: list[str] = [
+        os.path.join(SUMMARY_DIR, "metrics_all_methods.csv"),
+        os.path.join(SUMMARY_DIR, "metrics_all_methods.parquet"),
+        os.path.join(SUMMARY_DIR, "method_runtime_summary.csv"),
+    ]
+
+    if CELLADMIX_BASES:
+        targets += [
+            os.path.join(OUTPUT_DIR, f"celladmix_from_{b}", "method_info.json")
+            for b in CELLADMIX_BASES
+        ]
+    if SPLIT_BASES:
+        targets += [
+            os.path.join(OUTPUT_DIR, f"split_from_{b}", "method_info.json")
+            for b in SPLIT_BASES
+        ]
+    if OVRLPY_BASES:
+        targets += [
+            os.path.join(OUTPUT_DIR, f"ovrlpy_from_{b}", "method_info.json")
+            for b in OVRLPY_BASES
+        ]
+    return targets
+
+
+localrules: benchmark_all, benchmark_report_only
+
+
+rule benchmark_all:
+    """Default target. Produces the metrics CSV and any enabled correction outputs."""
+    input:
+        benchmark_targets()
+
+
+rule benchmark_report_only:
+    """Convenience target: full HTML report + all figures."""
+    input:
+        os.path.join(SUMMARY_DIR, "benchmark_report.html"),
+
+
+# Snakemake uses the first rule as the default target. `benchmark_all` is
+# defined first above, so invoking snakemake without a target builds it.

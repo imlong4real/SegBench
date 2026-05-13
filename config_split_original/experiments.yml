@@ -1,0 +1,49 @@
+_base_path: /path/to/raw/data
+
+condition_1:
+  _cell_type_annotation:
+    reference_based:
+      # A valid reference should have both a valid path (not `None` or "") and at least one level.
+      # The name of reference is user-defined and should be unique within each condition.
+      ref_1_name:
+        path: /path/to/reference_1
+        levels:
+          -
+
+        # Minimum number of cells required per cell type. Can be decreased for smaller references.
+        cell_min_instance: 25
+
+      ref_2_name:
+        path: /path/to/reference_2
+        levels:
+          -
+
+        # Minimum number of cells required per cell type. Can be decreased for smaller references.
+        cell_min_instance: 25
+
+  gene_panel_1:
+    _gene_panel_file: /path/to/or/name/of/gene/panel/file
+
+    # Are other stainings available in this panel besides DAPI for nuleus?
+    _extra_stain:
+      boundary: false
+      interior: false
+
+    _qc:
+      # Comment out any of them if they are the same as the global QC thresholds.
+      min_counts: 10
+      min_features: 5
+      max_counts: Inf
+      max_features: Inf
+      min_cells: 5
+
+    _target_counts:
+      # Comment out if they are the same as the global target counts for coexpression.
+      - 30
+      - 50
+      - 200
+
+    donor_1: sample_1
+    donor_2:
+      - sample_2
+      - sample_3

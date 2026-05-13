@@ -1,0 +1,223 @@
+output_path: results
+
+containers:
+  python_cuda:
+  r:
+  10x:
+  baysor:
+  proseg:
+
+experiments: experiments.yml
+
+gpu:
+  available: true
+  partition_name: "gpu"
+
+reprocess:
+  level: 1
+  _threads: 16
+  _memory: 64
+
+segmentation:
+  methods:
+    - 10x_mm
+    - 10x
+    - baysor
+    - proseg_expected
+    - proseg_mode
+    - segger
+
+  10x_mm:
+    expansion-distance:
+      - 5
+
+    localcores: 16
+    localmem: 128
+    _other_options:
+
+  10x:
+    expansion-distance:
+      - 0
+      - 5
+      - 15
+
+    localcores: 16
+    localmem: 64
+    _other_options:
+
+  baysor:
+    _config: "workflow/configs/baysor_xenium.toml"
+    _threads: 1
+    _memory: 200
+    _other_options:
+
+  proseg:
+    run:
+      _threads: 16
+      _memory: 100
+      _other_options:
+
+    expected:
+      use_mapping: false
+
+    mode:
+      use_mapping: false
+
+  segger:
+    preprocess:
+      tile_width: 200
+      tile_height: 200
+      _threads: 8
+      _other_options:
+
+    train:
+      num_tx_tokens: 500
+      devices: 1
+      max_epochs: 200
+      batch_size: 4
+      _threads: 4
+      _other_options:
+
+    predict:
+      use_cc: False
+      _other_options:
+
+  _normalisation:
+    _threads: 16
+    _memory: 128
+
+  _qc:
+    _create_dummy_table: false
+
+    reference_name:
+    reference_level:
+
+standard_seurat_analysis:
+  qc:
+    min_counts: 10
+    min_features: 5
+    max_counts: Inf
+    max_features: Inf
+    min_cells: 5
+
+  normalisation:
+    methods:
+      - lognorm
+      - sctransform
+
+  dim_reduction:
+    n_dims: 50
+
+  clustering:
+    resolution: 0.8
+    
+  sketching:
+    enable_sketching: True
+    sketch_threshold: 500000  
+    sketch_ncells: 100000
+    sketch_method: "LeverageScore"
+
+joint_scanpy_analysis:
+  methods:
+    - condition_wise
+    - gene_panel_wise
+
+  condition_wise:
+    n_comps: 50
+    n_neighbors: 50
+    min_dist: 0.3
+    metric: "cosine"
+
+  gene_panel_wise:
+    n_comps: 50
+    n_neighbors: 50
+    min_dist: 0.3
+    metric: "cosine"
+
+coexpression:
+  methods:
+    - conditional
+    - jaccard
+    - pearson
+    - spearman
+
+  target_counts:
+    - 30
+    - 50
+    - 200
+
+cell_type_annotation:
+  reference_based:
+    methods:
+      - rctd_class_aware
+      - rctd_class_unaware
+      - singler
+      - seurat
+      - xgboost
+
+    modes:
+      - single_cell
+
+    rctd:
+      # Min UMI in xenium cells to consider cell for sigma extimation (sigma of Log-Poisson distribution).
+      UMI_min_sigma:
+        - 100 # low UMI in single-cell mode
+        - 300 # higher UMI in cluster mode
+
+      _threads: 20
+      _other_options:
+
+    singler:
+      # Use differentially expressed genes.
+      genes: "de"
+
+      # Test to use for DEA.
+      de_method: "t"
+
+      aggr_ref: True
+
+      aggr_args_rank: 50
+      aggr_args_power: 0.7
+
+      _other_options:
+
+    seurat:
+      min_dim: 1
+      max_dim: 50
+
+      _other_options:
+
+    xgboost:
+      nrounds: 1000
+      eta: 0.3
+
+      _other_options:
+
+count_correction:
+  methods:
+    - split_fully_purified
+    - split_spot_class_balanced
+    - split_score_balanced
+    - ovrlpy
+    - resolvi_unsupervised
+    - resolvi_supervised
+
+  ovrlpy:
+    signal_integrity_threshold: 0.5
+
+  resolvi:
+    train:
+      max_epochs: 50
+      mixture_k: 50
+
+    predict:
+      num_samples: 30
+      batch_size: 1000
+
+doublet_finding:
+  methods:
+    - scdblfinder_label_aware
+    - scdblfinder_label_unaware
+
+  scdblfinder:
+    _other_options:

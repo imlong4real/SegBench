@@ -1,0 +1,123 @@
+---
+params:
+  gene_panel_id: "TO_BE_SET"
+  file_path: "TO_BE_SET"
+  reference_name: "TO_BE_SET"
+  reference_level: "TO_BE_SET"
+
+title: "Report: Segmentation QC based on RCTD for gene panel `r params$gene_panel_id`"
+author: "Daria Buszta"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, include = FALSE}
+library(Seurat)
+library(arrow)
+library(ggplot2)
+library(dplyr)
+```
+
+```{r, df prep, echo=FALSE}
+data <- read_parquet(params$file_path)
+
+data <- data %>%
+  mutate(
+    segmentation_id = as.factor(segmentation_id)
+  ) %>%
+  filter(
+    reference_name == params$reference_name,
+    reference_level == params$reference_level
+  )
+```
+
+# Generate QC plots
+
+number of cells
+
+```{r, fig.height=7}
+
+ggplot(data, aes(x = sample, y = ncell, color = segmentation_id)) +
+  geom_point(alpha = 0.9, size=4) +
+  scale_y_continuous(limits = c(0, NA)) +  # Ensure y-axis starts at 0
+  theme_minimal() +
+  labs(y = "Cell Count", title = NULL, x= "Sample") +
+  theme( axis.title = element_text(size = 26),       # Increase axis title font size
+         axis.text = element_text(size = 24),        # Increase axis text font size
+         legend.text = element_text(size = 24),      # Increase legend text font size
+         plot.title = element_text(size = 28),        # Increase plot title font size
+         )
+
+```
+
+singlets
+
+```{r, fig.height=7}
+
+ggplot(data, aes(x = sample, y = singlet_prop, color = segmentation_id)) +
+  geom_point(alpha = 0.9, size=4) +
+  scale_y_continuous(limits = c(0, NA)) +  # Ensure y-axis starts at 0
+  theme_minimal() +
+  labs(y = "Singlet Proportion", title = NULL, x= "Sample") +
+  theme( axis.title = element_text(size = 26),       # Increase axis title font size
+         axis.text = element_text(size = 24),        # Increase axis text font size
+         legend.text = element_text(size = 24),      # Increase legend text font size
+         plot.title = element_text(size = 28),        # Increase plot title font size
+         )
+
+```
+
+rejects
+
+```{r, fig.height=7}
+
+ggplot(data, aes(x = sample, y = reject_prop, color = segmentation_id)) +
+  geom_point(alpha = 0.9, size=4) +
+  scale_y_continuous(limits = c(0, NA)) +  # Ensure y-axis starts at 0
+  theme_minimal() +
+  labs(y = "Reject Proportion", title = NULL, x= "Sample") +
+  theme( axis.title = element_text(size = 26),       # Increase axis title font size
+         axis.text = element_text(size = 24),        # Increase axis text font size
+         legend.text = element_text(size = 24),      # Increase legend text font size
+         plot.title = element_text(size = 28),        # Increase plot title font size
+         )
+
+```
+
+mean_nCount
+
+```{r, fig.height=7}
+
+ggplot(data, aes(x = sample, y = mean_ncount, color = segmentation_id)) +
+  geom_point(alpha = 0.9, size=4) +
+  scale_y_continuous(limits = c(0, NA)) +  # Ensure y-axis starts at 0
+  theme_minimal() +
+  labs(y = "mean_nCount",title = NULL, x= "Sample") +
+  theme( axis.title = element_text(size = 26),       # Increase axis title font size
+         axis.text = element_text(size = 24),        # Increase axis text font size
+         legend.text = element_text(size = 24),      # Increase legend text font size
+         plot.title = element_text(size = 28),        # Increase plot title font size
+         )
+
+```
+
+mean_nFeature
+
+```{r, fig.height=7}
+
+ggplot(data, aes(x = sample, y = mean_nfeature, color = segmentation_id)) +
+  geom_point(alpha = 0.9, size=4) +
+  scale_y_continuous(limits = c(0, NA)) +  # Ensure y-axis starts at 0
+  theme_minimal() +
+  labs(y = "mean_nFeature", title = NULL, x= "Sample") +
+  theme( axis.title = element_text(size = 26),       # Increase axis title font size
+         axis.text = element_text(size = 24),        # Increase axis text font size
+         legend.text = element_text(size = 24),      # Increase legend text font size
+         plot.title = element_text(size = 28),        # Increase plot title font size
+         )
+
+```

@@ -1,0 +1,12 @@
+name: tracer_benchmark_ovrlpy
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - python=3.11
+  - numpy
+  - pandas
+  - pyarrow
+  - pip
+  - pip:
+      - ovrlpy

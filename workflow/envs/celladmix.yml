@@ -1,0 +1,13 @@
+name: tracer_benchmark_celladmix
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - r-base>=4.3
+  - r-optparse
+  - r-jsonlite
+  - r-matrix
+  - r-arrow
+  - r-devtools
+  # cellAdmix itself must be installed from GitHub:
+  #   R -e 'devtools::install_github("kharchenkolab/cellAdmix")'

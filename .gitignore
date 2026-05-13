@@ -1,0 +1,44 @@
+# Data and outputs — never tracked.
+dataset/
+results/
+logs/
+benchmark_results/
+outputs/
+
+# Snakemake state.
+.snakemake/
+
+# Conda/Singularity artifacts.
+*.sif
+*.sqsh
+.conda/
+
+# Python cache / editor / OS noise.
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ipynb_checkpoints/
+
+# OS metadata.
+.DS_Store
+Thumbs.db
+
+# Editor / agent state.
+.vscode/
+.idea/
+.claude/
+
+# R.
+.Rhistory
+.RData
+.Rproj.user/
+renv/library/
+
+# Local secrets / temp.
+.env
+*.tmp
+*.log
