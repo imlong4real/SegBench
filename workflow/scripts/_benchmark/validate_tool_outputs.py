@@ -191,6 +191,13 @@ def validate_method(method: str, spec: dict, results: Path) -> dict:
         candidate = results / spec["raw_fallback"]
         if candidate.exists():
             info_path = candidate
+    # Fallback for raw_only methods that wrote ONLY a BLOCKED method_info.json
+    # (no other artifacts on disk). Search the conventional sibling directory.
+    if info_path is None and kind == "raw_only" and raw_required:
+        first_dir = (results / raw_required[0]).parent
+        candidate = first_dir / "method_info.json"
+        if candidate.exists():
+            info_path = candidate
 
     info = _read_info(info_path) if info_path else None
     row["method_info_path"] = str(info_path) if info_path else ""

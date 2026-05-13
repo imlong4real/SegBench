@@ -213,7 +213,18 @@ if (exists("correct_admixture", where = asNamespace("cellAdmix"))) {
   )
   if (!is.null(res)) corrected <- res
 } else {
-  message("[celladmix] cellAdmix is installed but no known entry point was found; emitting uncorrected counts.")
+  # No known entry point. Per the project's no-stub policy, fail loudly
+  # rather than emit uncorrected counts.
+  available <- ls(asNamespace("cellAdmix"))
+  stop(sprintf(
+    paste0(
+      "cellAdmix is installed but no known entry point was found. ",
+      "Expected one of: cellAdmix::correct_admixture, cellAdmix::cellAdmix. ",
+      "Available exported names: %s. ",
+      "Update workflow/scripts/_benchmark/run_celladmix.R to call the correct API for this version."
+    ),
+    paste(available, collapse = ", ")
+  ))
 }
 
 # Persist outputs.

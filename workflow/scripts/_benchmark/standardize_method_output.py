@@ -285,9 +285,12 @@ def standardize_proseg(args) -> dict[str, str]:
         "z": "z_location",
     }
     df = df.rename(columns={k: v for k, v in rename.items() if k in df.columns})
-    # In proseg, unassigned transcripts get the max cell id.
-    cid = df["cell_id_method"].astype("string")
-    df.loc[cid == str(df["cell_id_method"].max()), "cell_id_method"] = "UNASSIGNED"
+    # In proseg, unassigned transcripts get the max integer cell id.
+    # We mark those "UNASSIGNED" and force the whole column to string so
+    # parquet writers don't fight a mixed int/str column.
+    max_int = df["cell_id_method"].max()
+    df["cell_id_method"] = df["cell_id_method"].astype("string")
+    df.loc[df["cell_id_method"] == str(max_int), "cell_id_method"] = "UNASSIGNED"
 
     df = _apply_filters(
         df,
