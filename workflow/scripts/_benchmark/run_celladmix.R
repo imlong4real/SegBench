@@ -213,18 +213,56 @@ if (exists("correct_admixture", where = asNamespace("cellAdmix"))) {
   )
   if (!is.null(res)) corrected <- res
 } else {
-  # No known entry point. Per the project's no-stub policy, fail loudly
-  # rather than emit uncorrected counts.
+  # The installed GitHub version exposes a lower-level, reference-driven API
+  # rather than the historical convenience entry points assumed by this
+  # wrapper. Per the project's no-stub policy, record the real blocker and
+  # fail loudly rather than emit uncorrected counts.
   available <- ls(asNamespace("cellAdmix"))
-  stop(sprintf(
-    paste0(
-      "cellAdmix is installed but no known entry point was found. ",
-      "Expected one of: cellAdmix::correct_admixture, cellAdmix::cellAdmix. ",
-      "Available exported names: %s. ",
-      "Update workflow/scripts/_benchmark/run_celladmix.R to call the correct API for this version."
+  current_api <- all(c(
+    "estimate_contamination_scores",
+    "estimate_cell_admixture_fractions"
+  ) %in% available)
+  reason <- paste0(
+    "cellAdmix is installed, but this GitHub version does not export a ",
+    "single-call count-correction entry point. It exposes a reference-driven ",
+    "API (notably estimate_contamination_scores(cm.rna, cm.spatial, ",
+    "annot.rna, annot.spatial, cell.type.adj.mat, ...)), which requires a ",
+    "matched single-cell RNA reference/count matrix and annotations. This ",
+    "benchmark run only has Xenium graphclust labels, so running cellAdmix ",
+    "would require additional reference inputs rather than a dependency fix."
+  )
+  desc <- utils::packageDescription("cellAdmix")
+  info <- list(
+    method_name = sprintf("celladmix_from_%s", opt$`base-method`),
+    method_version = as.character(desc$Version),
+    git_commit = as.character(desc$GithubSHA1),
+    status = "BLOCKED",
+    stub = FALSE,
+    reason = reason,
+    actionable_to_unblock = list(
+      "Provide a matched scRNA reference count matrix and per-cell annotation labels.",
+      "Provide spatial cell annotations plus a cell-type adjacency matrix for the Xenium sample.",
+      "Extend workflow/scripts/_benchmark/run_celladmix.R with explicit --rna-counts/--rna-annotations/--cell-type-adjacency inputs and call cellAdmix::estimate_contamination_scores."
     ),
-    paste(available, collapse = ", ")
-  ))
+    command = paste(commandArgs(trailingOnly = FALSE), collapse = " "),
+    input_files = list(mtx_path, barcodes_path, features_path, opt$`cluster-labels`),
+    output_files = list(),
+    start_time = start_time,
+    end_time = format(Sys.time(), "%Y-%m-%dT%H:%M:%SZ", tz = "UTC"),
+    container_or_env = Sys.getenv("CONDA_DEFAULT_ENV", unset = NA),
+    extra = list(
+      base_method = opt$`base-method`,
+      package_installed = TRUE,
+      current_api_detected = current_api,
+      cluster_labels_source = opt$`cluster-labels`,
+      available_export_count = length(available)
+    )
+  )
+  writeLines(
+    jsonlite::toJSON(info, pretty = TRUE, auto_unbox = TRUE, null = "null"),
+    file.path(opt$`out-dir`, "method_info.json")
+  )
+  stop(reason)
 }
 
 # Persist outputs.

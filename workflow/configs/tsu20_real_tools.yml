@@ -1,0 +1,26 @@
+# TSU-20 real non-TRACER rescue run for SPLIT and cellAdmix.
+
+dataset:
+  name: tsu20_tools
+  xenium_dir: dataset/lung_cancer_xenium_10x/TSU-20
+  output_dir: results/tsu20_tools
+  scrna_h5ad: dataset/lung_cancer_scrna_10/lung_cancer_scrna_split.h5ad
+  clusters: dataset/lung_cancer_xenium_10x/TSU-20/analysis/clustering/gene_expression_graphclust/clusters.csv
+
+methods:
+  tracer: false
+  segger: false
+  split_xenium_default: true
+  celladmix_xenium_default: true
+
+split:
+  reference_celltype_column: auto
+  common_inputs: results/tsu20_tools/common_inputs
+
+celladmix:
+  common_inputs: results/tsu20_tools/common_inputs
+  num_factors: 10
+  nmol_dsamp: 10000
+  n_cells_nmf: 2000
+  cores: 1
+  temporary_celltype_source: graphclust clusters.csv

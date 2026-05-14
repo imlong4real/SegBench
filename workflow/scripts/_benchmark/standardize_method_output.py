@@ -215,8 +215,12 @@ def standardize_xenium_default(args) -> dict[str, str]:
 def _read_baysor_segmentation(csv_path: Path) -> pd.DataFrame:
     df = pd.read_csv(csv_path)
     # Baysor segmentation.csv typically has: molecule_id, cell, gene, x, y, z, ...
+    # When Baysor is run from Xenium transcripts.parquet, it can also preserve
+    # the original Xenium transcript_id. Prefer that real identifier over the
+    # sequential Baysor molecule_id so provenance merges stay one-column clean.
+    if "transcript_id" not in df.columns and "molecule_id" in df.columns:
+        df = df.rename(columns={"molecule_id": "transcript_id"})
     rename = {
-        "molecule_id": "transcript_id",
         "cell": "cell_id_method",
         "gene": "feature_name",
         "x": "x_location",
