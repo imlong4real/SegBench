@@ -32,9 +32,9 @@ else
     apptainer build --force "${SIF}" python_cuda.def
 fi
 
-if [[ -s containers/python_cuda.sif ]]; then
-    echo "[$(date)] SUCCESS: containers/python_cuda.sif exists ($(du -sh containers/python_cuda.sif | cut -f1))"
+if [[ -s "${SIF}" ]]; then
+    echo "[$(date)] SUCCESS: ${SIF} exists ($(du -sh "${SIF}" | cut -f1))"
 else
-    echo "[$(date)] ERROR: containers/python_cuda.sif is missing or empty"
+    echo "[$(date)] ERROR: ${SIF} is missing or empty"
     exit 1
 fi
