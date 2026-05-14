@@ -1,0 +1,62 @@
+BootStrap: docker
+From: nvidia/cuda:12.1.1-cudnn8-runtime-ubuntu22.04
+
+%labels
+    Author senbaikang (Segger fork)
+    Version 96e531dd7313dfe9c19111b029b49e582531044f
+    Description Singularity/Apptainer container for Segger with CUDA 12.1 support
+
+%environment
+    export CUDA_HOME=/usr/local/cuda
+    export PATH=/usr/local/cuda/bin:$PATH
+    export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
+    export PYTHONPATH=/workspace/segger_dev/src:$PYTHONPATH
+
+%post
+    # Update and install system dependencies
+    apt-get update -y
+    apt-get install -y --no-install-recommends \
+        git \
+        wget \
+        curl \
+        unzip \
+        htop \
+        vim \
+        build-essential \
+        python3 \
+        python3-pip \
+        python3-venv \
+        libffi-dev \
+        libssl-dev \
+        ca-certificates
+
+    # Create symbolic link for python
+    ln -s /usr/bin/python3 /usr/bin/python
+
+    # Upgrade pip
+    python3 -m pip install --no-cache-dir --upgrade pip setuptools wheel
+
+    # Install global python tools
+    pip install --no-cache-dir debugpy jupyterlab
+
+    # Clone and install Segger with CUDA 12 support
+    mkdir -p /workspace
+    cd /workspace
+    git clone https://github.com/EliHei2/segger_dev.git /workspace/segger_dev
+    cd /workspace/segger_dev
+    pip install -e ".[cuda12]" --no-cache-dir
+
+    # Clean up
+    apt-get clean
+    rm -rf /var/lib/apt/lists/*
+
+%runscript
+    exec python "$@"
+
+%help
+    This container provides Segger with CUDA 12.1 support for GPU-accelerated
+    graph neural network-based transcript-to-cell assignment.
+    
+    Usage:
+      singularity exec --nv container.sif python -c "import segger; print(segger.__version__)"
+      apptainer exec --nv container.sif python script.py
