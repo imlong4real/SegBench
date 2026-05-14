@@ -16,6 +16,9 @@ README_SPLIT_TEMPLATE.md
 containers/
 .conda/
 
+# Parquet data files.
+*.parquet
+
 # Python cache / editor / OS noise.
 __pycache__/
 *.pyc

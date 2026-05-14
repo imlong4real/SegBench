@@ -26,7 +26,7 @@ Authoritative validation table:
 | `ovrlpy_xenium_default` | PASS | ovrlpy 1.1.0; signal_integrity / signal_strength / per-cell VSI / pseudocell summary parquets |
 | `split_xenium_default` | PASS | spacexr 2.2.1 RCTD doublet mode + SPLIT 0.1.3 `purify(DO_purify_singlets = TRUE)`; scRNA reference = `dataset/lung_cancer_scrna_10/lung_cancer_scrna_split.h5ad`, 35,954 ref cells, 58,648 spatial cells, 292 shared genes |
 | `celladmix_xenium_default` | DEBUG_PASS | cellAdmix 0.1.0 molecule-level workflow (samp_ct_equal → run_knn_nmf → run_crf_all → get_mol_knn → run_bridge_test → check_fp); 1,635,024 input transcripts → 1,519,449 retained, 57,136 cells, 22 temporary graphclust labels. Real run, biological labels not yet curated → `DEBUG_PASS` not `PASS`. |
-| `segger` | SKIPPED | Skipped by request for this run. No CUDA / no GPU / no Singularity available on this host. No fake outputs were produced. |
+| `segger` | IN PROGRESS | Container building on DSAI HPC cluster (nvl partition, H100). See [docs/hpc_segger_smoke.md](docs/hpc_segger_smoke.md). |
 | `tracer_*` | DISABLED | Intentionally disabled in `workflow/configs/tsu20_real_tools.yml`. |
 
 ---
@@ -564,9 +564,11 @@ methods:
   before the CRF/bridge step (1,313 cells dropped in this run).
 - **Xenium Ranger download link changed** — `reproducibility/10x.def`
   pins a 10x download URL; if 10x rotates the link, patch the `.def`.
-- **Segger requires CUDA + GPU** — not runnable on this host. Move to
-  Linux+CUDA+Singularity. The `method_info.json` records the unblock
-  procedure.
+- **Segger requires CUDA + GPU** — previously skipped on macOS. Now
+  configured for the DSAI HPC cluster (dsailogin). See
+  [docs/hpc_segger_smoke.md](docs/hpc_segger_smoke.md) for the full
+  HPC smoke-test procedure. Apptainer 1.4.4 is on compute nodes only;
+  build via `sbatch scripts/slurm/build_python_cuda_container.sbatch`.
 - **SPLIT requires a single-cell reference** — provide a labelled scRNA
   h5ad via `--scrna-h5ad` and ensure the cell-type column is detectable
   by `inspect_h5ad_reference.py`. Without it RCTD cannot run, and
