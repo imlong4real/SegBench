@@ -4,6 +4,8 @@ results/
 logs/
 benchmark_results/
 outputs/
+docs/
+README_SPLIT_TEMPLATE.md
 
 # Snakemake state.
 .snakemake/
@@ -11,6 +13,7 @@ outputs/
 # Conda/Singularity artifacts.
 *.sif
 *.sqsh
+containers/
 .conda/
 
 # Python cache / editor / OS noise.
@@ -37,6 +40,7 @@ Thumbs.db
 .RData
 .Rproj.user/
 renv/library/
+NMF_*/
 
 # Local secrets / temp.
 .env
