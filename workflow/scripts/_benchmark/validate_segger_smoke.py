@@ -1,11 +1,11 @@
 """
-Validate the Segger smoke-test outputs and write a JSON report.
+Validate Segger TSU-20 full-run outputs and write a JSON report.
 
 Usage:
     python workflow/scripts/_benchmark/validate_segger_smoke.py
 
 Output:
-    results/segger_smoke/segger_smoke_validation.json
+    results/segger_TSU20/segger_validation.json
 """
 
 import json
@@ -18,17 +18,13 @@ REPO_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(
 ))))
 
 CHECKS = {
-    "input_subset_parquet": "results/segger_smoke/input/transcripts_100k.parquet",
-    "input_summary_json": "results/segger_smoke/input/input_summary.json",
-    "xenium_bundle_transcripts": "results/segger_smoke/input/xenium_bundle/transcripts.parquet",
-    "xenium_bundle_nuclei": "results/segger_smoke/input/xenium_bundle/nucleus_boundaries.parquet",
-    "preprocessed_data_dir": "results/segger_smoke/preprocessed_data",
-    "trained_model_dir": "results/segger_smoke/trained_model",
-    "segger_output_dir": "results/segger_smoke/segger_output",
+    "xenium_bundle_transcripts": "results/segger_smoke/input/xenium_bundle/TSU-20/transcripts.parquet",
+    "xenium_bundle_nuclei": "results/segger_smoke/input/xenium_bundle/TSU-20/nucleus_boundaries.parquet",
+    "preprocessed_data_dir": "results/segger_TSU20/preprocessed_data",
+    "trained_model_dir": "results/segger_TSU20/trained_model",
+    "segger_output_dir": "results/segger_TSU20/segger_output",
     "container_sif": "containers/python_cuda.sif",
 }
-
-EXPECTED_MAX_ROWS = 100_000
 
 
 def check_file_nonempty(path):
@@ -37,20 +33,6 @@ def check_file_nonempty(path):
 
 def check_dir_nonempty(path):
     return os.path.isdir(path) and bool(os.listdir(path))
-
-
-def check_parquet_rows(path):
-    try:
-        import pyarrow.parquet as pq
-        t = pq.read_table(path)
-        return len(t)
-    except Exception:
-        try:
-            import pandas as pd
-            df = pd.read_parquet(path)
-            return len(df)
-        except Exception:
-            return -1
 
 
 def main():
@@ -72,18 +54,6 @@ def main():
         if not ok:
             results["blockers"].append(f"MISSING or EMPTY: {rel_path}")
 
-    # Row count check on input subset
-    subset_path = os.path.join(REPO_DIR, CHECKS["input_subset_parquet"])
-    if os.path.exists(subset_path):
-        n_rows = check_parquet_rows(subset_path)
-        results["checks"]["input_subset_parquet"]["rows"] = n_rows
-        if n_rows > EXPECTED_MAX_ROWS:
-            results["blockers"].append(
-                f"input subset has {n_rows} rows > {EXPECTED_MAX_ROWS}"
-            )
-        elif n_rows <= 0:
-            results["blockers"].append("input subset row count unreadable or 0")
-
     # Check segger output for non-stub files
     out_dir = os.path.join(REPO_DIR, CHECKS["segger_output_dir"])
     if os.path.isdir(out_dir):
@@ -104,7 +74,7 @@ def main():
     else:
         results["status"] = "PASS"
 
-    out_path = os.path.join(REPO_DIR, "results/segger_smoke/segger_smoke_validation.json")
+    out_path = os.path.join(REPO_DIR, "results/segger_TSU20/segger_validation.json")
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
     with open(out_path, "w") as fh:
         json.dump(results, fh, indent=2)

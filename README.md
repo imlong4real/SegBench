@@ -26,7 +26,7 @@ Authoritative validation table:
 | `ovrlpy_xenium_default` | PASS | ovrlpy 1.1.0; signal_integrity / signal_strength / per-cell VSI / pseudocell summary parquets |
 | `split_xenium_default` | PASS | spacexr 2.2.1 RCTD doublet mode + SPLIT 0.1.3 `purify(DO_purify_singlets = TRUE)`; scRNA reference = `dataset/lung_cancer_scrna_10/lung_cancer_scrna_split.h5ad`, 35,954 ref cells, 58,648 spatial cells, 292 shared genes |
 | `celladmix_xenium_default` | DEBUG_PASS | cellAdmix 0.1.0 molecule-level workflow (samp_ct_equal → run_knn_nmf → run_crf_all → get_mol_knn → run_bridge_test → check_fp); 1,635,024 input transcripts → 1,519,449 retained, 57,136 cells, 22 temporary graphclust labels. Real run, biological labels not yet curated → `DEBUG_PASS` not `PASS`. |
-| `segger` | IN PROGRESS | Container building on DSAI HPC cluster (nvl partition, H100). See [docs/hpc_segger_smoke.md](docs/hpc_segger_smoke.md). |
+| `segger` | PASS | Segger 0.1.0 on DSAI HPC cluster (NVIDIA L40S, Apptainer container); 271 tiles preprocessed (train=137, val=15, test=119), 3-epoch training, full prediction (Train 35/35, Val 4/4, Test 30/30); outputs: `segger_adata.h5ad` (50 MB), `segger_transcripts.parquet` (49 MB). See [docs/hpc_segger_smoke.md](docs/hpc_segger_smoke.md). |
 | `tracer_*` | DISABLED | Intentionally disabled in `workflow/configs/tsu20_real_tools.yml`. |
 
 ---
@@ -435,20 +435,95 @@ runtime ≈ 1,821 s.
 
 ---
 
-### 7. Segger — SKIPPED on this host
+### 7. Segger 0.1.0 (DSAI HPC cluster)
 
-**Purpose.** Graph-neural-network transcript-to-cell assignment.
+**Purpose.** Graph-neural-network transcript-to-cell assignment using
+PyTorch Geometric heterogeneous graphs.
 
-**Requirements.** CUDA + NVIDIA GPU + the `python_cuda` Singularity
-container from the original SPLIT pipeline. Version pin (per template):
-`senbaikang/segger_dev@96e531dd7313dfe9c19111b029b49e582531044f`.
+**Requirements.** CUDA + NVIDIA GPU + Apptainer container
+`containers/python_cuda.sif` (18 GB; built from
+`reproducibility/python_cuda/python_cuda.def`). Must be run on the DSAI
+HPC cluster (compute nodes only — Apptainer is not on the login node).
 
-**Current TSU-20 status.** SKIPPED. The macOS arm64 host has no GPU,
-no CUDA, and no Singularity. A non-stub `method_info.json` at
-`results/tsu20_tools/segger/raw/method_info.json` records the blocker
-and the unblock procedure (move to a Linux+CUDA host, build
-`segger.def`, wire `containers.python_cuda` in the config, re-enable
-`methods.segger`).
+- Segger version: `bdsc-tds/segger_dev@4bf56dec2a364de8eee4fcab663e798eb106e21a`
+- Container base: `nvidia/cuda:12.1.0-runtime-ubuntu22.04` + micromamba
+- GPU: NVIDIA L40S 46 GB (l40s partition); nvl / h100 as fallback
+- Slurm account: `adeshpa6`
+
+**Input files**
+- `results/segger_smoke/input/xenium_bundle/TSU-20/transcripts.parquet`
+- `results/segger_smoke/input/xenium_bundle/TSU-20/nucleus_boundaries.parquet`
+- `results/segger_smoke/input/xenium_bundle/TSU-20/experiment.xenium`
+
+(The Xenium bundle was constructed from
+`/weka/home/lyuan13/TRACER/tutorials/lung_cancer/data/lung_cancer_df.parquet`
+by `workflow/scripts/_segmentation/create_segger_smoke_subset.py`.)
+
+**Build the container (once)**
+
+```bash
+# From repo root on the login node:
+sbatch scripts/slurm/build_python_cuda_container.sbatch
+# Expected build time: 30–60 min. Output: containers/python_cuda.sif
+```
+
+**Run the full pipeline (preprocess → train → predict)**
+
+```bash
+sbatch scripts/slurm/run_segger_smoke.sbatch
+# Monitor:
+squeue -u $USER
+tail -f logs/slurm/segger_TSU20_<jobid>.out
+```
+
+Pipeline steps inside the job:
+1. `nvidia-smi` GPU check
+2. PyTorch CUDA check inside container
+3. `create_segger_smoke_subset.py` — builds Xenium bundle from parquet
+4. `create_dataset_fast.py` — Segger preprocess (200×200 tiles, 8 workers)
+5. `train_model.py` — 3-epoch training (`--devices 1 --accelerator cuda`)
+6. `patch_segger_edge_label.py` — fix sparse test tiles missing `edge_label`
+7. `predict_fast.py` — full prediction across all three splits
+
+**Run prediction only (tiles + checkpoint already exist)**
+
+```bash
+sbatch scripts/slurm/run_segger_predict_retry.sbatch
+```
+
+**Validate**
+
+```bash
+module load anaconda3/2024.02-1
+python workflow/scripts/_benchmark/validate_segger_smoke.py
+cat results/segger_TSU20/segger_validation.json
+```
+
+**Outputs**
+
+| Path | Size | Description |
+|------|------|-------------|
+| `results/segger_TSU20/preprocessed_data/` | — | 271 PyG tiles (train=137, val=15, test=119) |
+| `results/segger_TSU20/trained_model/lightning_logs/version_0/checkpoints/epoch=2-step=105.ckpt` | — | 3-epoch checkpoint |
+| `results/segger_TSU20/segger_output/.../segger_adata.h5ad` | 50 MB | AnnData with cell embeddings |
+| `results/segger_TSU20/segger_output/.../segger_transcripts.parquet` | 49 MB | Transcript-to-cell assignments |
+| `results/segger_TSU20/segger_output/.../transcripts_df.parquet/` | ~17 MB | 64-part Dask parquet |
+| `results/segger_TSU20/segger_validation.json` | — | Validation report (Status: PASS) |
+
+**Known limitations and bugs fixed**
+
+- `Trainer(devices=0)` is invalid under `accelerator=cuda` in PyTorch
+  Lightning — must use `--devices 1`.
+- `create_dataset_fast.py --sample_type xenium` writes all three splits
+  (train/val/test) automatically — do NOT copy test tiles into train/val.
+- PyG `RandomLinkSplit` silently skips adding `edge_label` to sparse/degenerate
+  graphs; 79/119 test tiles were missing it. Fixed by
+  `workflow/scripts/_segmentation/patch_segger_edge_label.py` (run before
+  predict). See `docs/segger_prediction_edge_label_debug.md` for full diagnosis.
+
+**Current TSU-20 status.** PASS. 271 tiles preprocessed, 3-epoch
+training on NVIDIA L40S, all three prediction splits complete (Train
+35/35, Val 4/4, Test 30/30). Validation JSON: Status PASS.
 
 ---
 

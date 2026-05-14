@@ -72,14 +72,47 @@ def detect_columns(df):
 
 
 def make_nucleus_boundaries(transcripts, x_col, y_col, gene_col):
-    """Create synthetic nuclear boundaries as small circles around transcript centroids.
+    """Create nucleus boundaries from actual cell_id assignments.
 
-    Uses a spatial grid to define ~50 synthetic nuclei, each approximated by
-    8 boundary vertices in a circle of radius ~5 microns.
+    Groups transcripts by cell_id and approximates each cell nucleus as a circle
+    of radius = max(1.5 × transcript spread, 8 µm) around the centroid.
+    Falls back to a synthetic 7×7 grid with 30 µm radius if cell_id is not
+    available or too few cells are present.
     """
-    xs = transcripts[x_col].values
-    ys = transcripts[y_col].values
+    n_pts = 8
+    angles = np.linspace(0, 2 * np.pi, n_pts, endpoint=False)
 
+    if "cell_id" in transcripts.columns:
+        cid_col = transcripts["cell_id"].astype(str)
+        with_cell = transcripts[~cid_col.isin(["", "nan", "None", "0"])]
+        unique_cells = with_cell["cell_id"].astype(str).unique()
+    else:
+        unique_cells = np.array([])
+
+    if len(unique_cells) >= 5:
+        records = []
+        for cid in unique_cells[:300]:   # cap at 300 nuclei for smoke test
+            mask = with_cell["cell_id"].astype(str) == cid
+            cx_pts = with_cell.loc[mask, x_col].values.astype(float)
+            cy_pts = with_cell.loc[mask, y_col].values.astype(float)
+            cx0, cy0 = cx_pts.mean(), cy_pts.mean()
+            spread = float(np.sqrt(((cx_pts - cx0) ** 2 + (cy_pts - cy0) ** 2).mean()))
+            radius = max(spread * 1.5, 8.0)
+            radius = min(radius, 40.0)
+            for angle in angles:
+                records.append(
+                    {
+                        "cell_id": str(cid),
+                        "vertex_x": float(cx0 + radius * np.cos(angle)),
+                        "vertex_y": float(cy0 + radius * np.sin(angle)),
+                    }
+                )
+        if records:
+            return pd.DataFrame(records)
+
+    # Fallback: uniform grid with large-enough radius to capture nearby transcripts
+    xs = transcripts[x_col].values.astype(float)
+    ys = transcripts[y_col].values.astype(float)
     x_min, x_max = xs.min(), xs.max()
     y_min, y_max = ys.min(), ys.max()
 
@@ -89,9 +122,7 @@ def make_nucleus_boundaries(transcripts, x_col, y_col, gene_col):
 
     records = []
     cell_id = 1
-    n_pts = 8
-    radius = 5.0
-    angles = np.linspace(0, 2 * np.pi, n_pts, endpoint=False)
+    radius = 30.0  # 30-µm radius so grid circles actually contain transcripts
 
     for x0 in cx:
         for y0 in cy:
@@ -204,6 +235,11 @@ def main():
         tx["cell_id"] = ""
     if "z_location" not in tx.columns:
         tx["z_location"] = 0.0
+
+    # Cast categorical columns to plain strings; PyArrow's match_substring_regex
+    # does not support dictionary-encoded types in the container's PyArrow version.
+    for col in tx.select_dtypes(include="category").columns:
+        tx[col] = tx[col].astype(str)
 
     tx_path = os.path.join(xenium_bundle, "transcripts.parquet")
     tx.to_parquet(tx_path, index=False)
