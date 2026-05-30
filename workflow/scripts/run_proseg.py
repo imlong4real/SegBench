@@ -141,11 +141,13 @@ def main() -> int:
         if args.extra_proseg_args:
             cmd += args.extra_proseg_args.split()
         rc_code, ext_rss = rc.run_subprocess(cmd, log=log, outdir=args.outdir, cwd=raw_dir)
-        timer.record_external("run_method", ext_rss)
         if rc_code != 0:
             raise SystemExit(f"proseg failed with exit code {rc_code}; see run.log.")
         if not tm_path.exists():
             raise SystemExit(f"proseg did not produce {tm_path}; see run.log.")
+    # Attach proseg-only peak RSS AFTER the stage is recorded (record_external
+    # scans completed stages, so it must run outside the `with` block).
+    timer.record_external("run_method", ext_rss)
 
     # --- convert_outputs ----------------------------------------------------
     std_path = outputs_dir / f"{METHOD}_transcripts_standardized.parquet"
@@ -182,7 +184,18 @@ def main() -> int:
             std = std.merge(df_in[["transcript_id", "qv"]], on="transcript_id", how="left")
         std.to_parquet(std_path, index=False, compression="snappy")
         log.info("Wrote standardized transcripts: %s", std_path)
-        rc.build_cell_by_gene_h5ad(std, out_path=h5ad_path, log=log)
+        # The cell-by-gene h5ad is a secondary artifact. anndata's import/writer
+        # can fail on a broken anndata/xarray/dask install; never let that sink a
+        # 20-minute run after proseg already produced the standardized parquet
+        # (the benchmark deliverable). Best-effort only.
+        h5ad_ok = False
+        try:
+            rc.build_cell_by_gene_h5ad(std, out_path=h5ad_path, log=log)
+            h5ad_ok = True
+        except Exception as e:
+            log.warning("Skipping cell-by-gene h5ad (%s: %s). The standardized "
+                        "parquet was written; this does not affect benchmarking.",
+                        type(e).__name__, str(e)[:160])
 
     # --- validate_schema ----------------------------------------------------
     with timer.time("validate_schema"):
@@ -197,7 +210,8 @@ def main() -> int:
             outdir=args.outdir, method=METHOD, sample_name=args.sample_name,
             args=args, timer=timer, repo_root=_REPO_ROOT,
             inputs={"transcripts": str(args.transcripts)},
-            outputs=[str(std_path), str(h5ad_path), str(tm_path), str(cm_path)],
+            outputs=[str(std_path)] + ([str(h5ad_path)] if h5ad_ok else [])
+                    + [str(tm_path), str(cm_path)],
             method_version=proseg_version, runner_kind="binary",
             extra_config={"nthreads": args.nthreads, "voxel_layers": args.voxel_layers,
                           "excluded_genes": EXCLUDE_GENES},

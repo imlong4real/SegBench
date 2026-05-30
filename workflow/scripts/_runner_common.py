@@ -188,7 +188,34 @@ class _StageCtx:
 # ===========================================================================
 # External subprocess with /usr/bin/time -v wrapping
 # ===========================================================================
-_TIME_RSS_RE = re.compile(r"Maximum resident set size \(kbytes\):\s*(\d+)")
+# GNU `/usr/bin/time -v` reports kbytes; BSD/macOS `/usr/bin/time -l` reports bytes.
+_TIME_RSS_RE_GNU = re.compile(r"Maximum resident set size \(kbytes\):\s*(\d+)")
+_TIME_RSS_RE_BSD = re.compile(r"(\d+)\s+maximum resident set size")
+
+
+def detect_external_time() -> tuple[str, str] | None:
+    """Probe `/usr/bin/time` for a flavor that reports peak RSS.
+
+    Returns ("gnu", "-v") on Linux GNU time, ("bsd", "-l") on macOS/BSD time,
+    or None if neither is available. The bash builtin `time` is ignored — only
+    the standalone `/usr/bin/time` binary reports max RSS.
+    """
+    gnu_time = "/usr/bin/time"
+    if not Path(gnu_time).exists():
+        return None
+    try:
+        probe = subprocess.run([gnu_time, "-v", "true"], capture_output=True, text=True)
+        if "Maximum resident set size" in probe.stderr:
+            return ("gnu", "-v")
+    except Exception:
+        pass
+    try:
+        probe = subprocess.run([gnu_time, "-l", "true"], capture_output=True, text=True)
+        if "maximum resident set size" in probe.stderr:
+            return ("bsd", "-l")
+    except Exception:
+        pass
+    return None
 
 
 def run_subprocess(
@@ -196,24 +223,16 @@ def run_subprocess(
     external_time_name: str = "external_time.txt",
     env: dict[str, str] | None = None, cwd: Path | None = None,
 ) -> tuple[int, float | None]:
-    """Run `cmd`, tee combined stdout/stderr into run.log, and (when GNU
-    /usr/bin/time -v is available) capture peak RSS into external_time.txt.
+    """Run `cmd`, tee combined stdout/stderr into run.log, and (when a
+    `/usr/bin/time` that reports peak RSS is available — GNU ``-v`` or BSD
+    ``-l``) capture peak RSS into external_time.txt.
 
     Returns (returncode, external_max_rss_gb_or_None).
     """
-    time_v = shutil.which("time")
-    use_time_v = False
-    # Only GNU time supports -v; the bash builtin does not. Probe explicitly.
     gnu_time = "/usr/bin/time"
-    if Path(gnu_time).exists():
-        try:
-            probe = subprocess.run([gnu_time, "-v", "true"],
-                                   capture_output=True, text=True)
-            use_time_v = "Maximum resident set size" in probe.stderr
-        except Exception:
-            use_time_v = False
+    detected = detect_external_time()
 
-    full_cmd = ([gnu_time, "-v"] + cmd) if use_time_v else cmd
+    full_cmd = ([gnu_time, detected[1]] + cmd) if detected else cmd
     log.info("[exec] %s", " ".join(str(c) for c in full_cmd))
     proc = subprocess.run(full_cmd, capture_output=True, text=True,
                           env=env, cwd=str(cwd) if cwd else None)
@@ -226,12 +245,19 @@ def run_subprocess(
             log.info("[stderr] %s", line)
 
     ext_rss_gb: float | None = None
-    if use_time_v:
+    if detected:
         (outdir / external_time_name).write_text(proc.stderr)
-        m = _TIME_RSS_RE.search(proc.stderr)
-        if m:
-            ext_rss_gb = float(m.group(1)) / (1024 ** 2)  # kbytes → GB
-            log.info("[exec] external max RSS = %.2f GB", ext_rss_gb)
+        flavor = detected[0]
+        if flavor == "gnu":
+            m = _TIME_RSS_RE_GNU.search(proc.stderr)
+            if m:
+                ext_rss_gb = float(m.group(1)) / (1024 ** 2)  # kbytes → GB
+        else:  # bsd
+            m = _TIME_RSS_RE_BSD.search(proc.stderr)
+            if m:
+                ext_rss_gb = float(m.group(1)) / (1024 ** 3)  # bytes → GB
+        if ext_rss_gb is not None:
+            log.info("[exec] external max RSS = %.2f GB (%s time)", ext_rss_gb, flavor)
     return proc.returncode, ext_rss_gb
 
 
@@ -347,6 +373,7 @@ def write_provenance(
     runner_kind: str = "python",  # "python" | "R" | "julia/binary"
     log: logging.Logger,
     summary_extra_lines: list[str] | None = None,
+    runtime_extra: dict[str, Any] | None = None,
 ) -> None:
     """Write runtime_memory.json, runtime_by_stage.tsv, config_receipt.json,
     run_summary.md. Shape is compatible with get_metric.py --runtime-json."""
@@ -369,6 +396,8 @@ def write_provenance(
         "total_seconds": timer.total_seconds,
         "peak_rss_gb_observed": timer.peak_rss_gb_observed,
     }
+    if runtime_extra:
+        rm.update(runtime_extra)
     (outdir / "runtime_memory.json").write_text(json.dumps(rm, indent=2, default=str))
 
     # --- runtime_by_stage.tsv (one row per stage; §7 fields) ----------------
@@ -508,13 +537,39 @@ def prepare_outdir(outdir: Path, sentinel: Path, overwrite: bool) -> None:
         )
 
 
+def read_parquet_robust(path: Path, *, log: logging.Logger | None = None) -> pd.DataFrame:
+    """Read a parquet file, falling back to the fastparquet engine.
+
+    Files written by newer pyarrow (>=20) embed size-statistics / level
+    histograms that older pyarrow readers (e.g. 19.x) fail to decode with
+    "Repetition level histogram size mismatch". When pyarrow raises, we retry
+    with the fastparquet engine, which is unaffected.
+    """
+    try:
+        return pd.read_parquet(path)
+    except Exception as e:  # pyarrow raises OSError on the histogram bug
+        if log is not None:
+            log.warning("pyarrow failed to read %s (%s: %s); retrying with "
+                        "fastparquet engine.", path, type(e).__name__, str(e)[:120])
+        try:
+            return pd.read_parquet(path, engine="fastparquet")
+        except Exception as e2:
+            raise SystemExit(
+                f"Could not read parquet {path}. pyarrow failed ({type(e).__name__}: "
+                f"{str(e)[:120]}) and the fastparquet fallback also failed "
+                f"({type(e2).__name__}: {str(e2)[:120]}). This file was likely "
+                f"written by a newer pyarrow than your reader — upgrade pyarrow "
+                f"(pip install -U 'pyarrow>=21') or install fastparquet."
+            ) from e2
+
+
 def load_input_transcripts(
     path: Path, *, log: logging.Logger, max_transcripts: int | None = None,
     seed: int = 1,
 ) -> pd.DataFrame:
     """Load the standardized input parquet, tolerating x_location/y_location."""
     log.info("Loading input transcripts: %s", path)
-    df = pd.read_parquet(path)
+    df = read_parquet_robust(path, log=log)
     ren = {}
     if "x" not in df.columns and "x_location" in df.columns:
         ren["x_location"] = "x"

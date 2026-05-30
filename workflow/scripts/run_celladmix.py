@@ -39,7 +39,10 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-_REPO_ROOT = Path(__file__).resolve().parents[1]
+# This file lives at <repo>/workflow/scripts/run_celladmix.py, so the repo root
+# is parents[2] (parents[1] is the `workflow` dir). R_SCRIPT and provenance
+# paths are built relative to the true repo root.
+_REPO_ROOT = Path(__file__).resolve().parents[2]
 _HERE = Path(__file__).resolve().parent
 for _p in (str(_HERE), str(_REPO_ROOT / "src"), str(_REPO_ROOT)):
     if _p not in sys.path:
@@ -159,11 +162,13 @@ def main() -> int:
                 "--cores", str(args.cores),
             ]
             rc_code, ext_rss = rc.run_subprocess(cmd, log=log, outdir=args.outdir)
-            timer.record_external("run_method", ext_rss)
             if rc_code != 0:
                 raise SystemExit(
                     f"cellAdmix R script failed (exit {rc_code}); see run.log / "
                     f"{raw_dir}/method_info.json for the missing dependency or error.")
+        # Attach the R subprocess peak RSS AFTER the stage is recorded
+        # (record_external scans completed stages, so it must run outside `with`).
+        timer.record_external("run_method", ext_rss)
         clean_p = raw_dir / "cleaned_transcripts.parquet"
         rem_p = raw_dir / "removed_transcripts.parquet"
         mi = raw_dir / "method_info.json"
@@ -185,8 +190,17 @@ def main() -> int:
         std = _standardize_celladmix(cleaned, removed, log=log)
         std.to_parquet(std_path, index=False, compression="snappy")
         log.info("Wrote standardized transcripts: %s", std_path)
-        # cell-by-gene built from RETAINED (cleaned) transcripts only.
-        rc.build_cell_by_gene_h5ad(std, out_path=h5ad_path, log=log)
+        # cell-by-gene built from RETAINED (cleaned) transcripts only. This is a
+        # secondary artifact; never let a broken anndata/dask install sink the run
+        # after the standardized parquet (the deliverable) is written.
+        h5ad_ok = False
+        try:
+            rc.build_cell_by_gene_h5ad(std, out_path=h5ad_path, log=log)
+            h5ad_ok = True
+        except Exception as e:
+            log.warning("Skipping cell-by-gene h5ad (%s: %s). The standardized "
+                        "parquet was written; this does not affect benchmarking.",
+                        type(e).__name__, str(e)[:160])
 
     # --- validate_schema ----------------------------------------------------
     with timer.time("validate_schema"):
@@ -205,7 +219,8 @@ def main() -> int:
             inputs={"transcripts": str(args.transcripts),
                     "common_inputs": str(args.common_inputs),
                     "clusters": str(args.clusters)},
-            outputs=[str(std_path), str(h5ad_path), str(clean_p), str(rem_p)],
+            outputs=[str(std_path)] + ([str(h5ad_path)] if h5ad_ok else [])
+                    + [str(clean_p), str(rem_p)],
             method_version=celladmix_version, runner_kind="R",
             extra_config={"num_factors": args.num_factors, "nmol_dsamp": args.nmol_dsamp,
                           "n_cells_nmf": args.n_cells_nmf, "bridge_cells": args.bridge_cells,
