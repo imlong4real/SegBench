@@ -137,6 +137,10 @@ def build_argparser() -> argparse.ArgumentParser:
     p.add_argument("--raw-segmentation", type=Path, default=None,
                    help="(--mode wrap only) Standardize this existing Baysor "
                         "segmentation.csv instead of running Baysor.")
+    p.add_argument("--extra-baysor-args", default="",
+                   help="Extra raw args appended to the `baysor run` command line "
+                        "(e.g. '--polygon-format none' to skip polygon/geometry "
+                        "output and lower peak memory on dense ROIs).")
     return p
 
 
@@ -357,6 +361,8 @@ def main() -> int:
                    "-m", str(args.min_molecules_per_cell)]
             if eff_scale is not None:
                 cmd += ["-s", str(eff_scale)]
+            if args.extra_baysor_args:
+                cmd += args.extra_baysor_args.split()
             cmd.append(str(baysor_in.resolve()))
             if args.use_prior:
                 cmd += [f":{_BPRIOR}",
