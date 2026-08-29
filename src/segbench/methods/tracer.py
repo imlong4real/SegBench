@@ -542,14 +542,9 @@ def main(argv: list[str] | None = None, method: str | None = None) -> int:
         outdir=args.outdir, method=method,
         modality="sequencing" if method.endswith("_seq") else "imaging",
         sample_name=args.sample_name, timer=timer, dataset=args.dataset,
-        transcripts=stx.transcript_accounting(
-            df_post, cell_col=resolve_label_col(df_post),
-            n_input=int(len(df))),
-        entities=stx.entity_accounting(
-            df_post,
-            cell_col=resolve_label_col(df_post),
-            entity_kind="bin" if method.endswith("_seq") else "cell",
-            n_entities=n_cells),
+        transcripts=_tracer_transcript_accounting(df_post, n_input=int(len(df))),
+        entities=_tracer_entity_accounting(
+            df_post, entity_kind="bin" if method.endswith("_seq") else "cell"),
         qc={"platform": args.platform,
             "pmi_threshold": args.pmi_threshold,
             "tau": args.tau,

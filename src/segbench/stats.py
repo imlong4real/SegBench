@@ -161,13 +161,24 @@ def write_benchmark_stats(
     outdir.mkdir(parents=True, exist_ok=True)
 
     stages = list(getattr(timer, "stages", []))
+    # Some wrappers predate StageTimer and carry only a `stages` list, with no
+    # aggregate properties. Derive the totals from the stages so those runs are
+    # not silently reported with null runtime/memory.
+    _total = getattr(timer, "total_seconds", None)
+    if _total is None and stages:
+        _total = float(sum(getattr(st, "seconds", 0.0) or 0.0 for st in stages))
+    _inproc = getattr(timer, "peak_rss_gb_observed", None)
+    if _inproc is None and stages:
+        vals = [getattr(st, "peak_rss_gb", None) for st in stages]
+        vals = [v for v in vals if v is not None and not np.isnan(v)]
+        _inproc = max(vals) if vals else None
     by_stage = {s.name: _f(s.seconds) for s in stages}
     method_stage = next((s for s in reversed(stages) if s.name == METHOD_STAGE), None)
 
     # Peak memory: prefer the externally measured value for the tool proper,
     # and say which source we used so cross-method comparisons stay honest.
     ext = _f(getattr(method_stage, "external_max_rss_gb", None)) if method_stage else None
-    inproc = _f(getattr(timer, "peak_rss_gb_observed", None))
+    inproc = _f(_inproc)
     memory = {
         "peak_rss_gb": ext if ext is not None else inproc,
         "method_peak_rss_gb": ext if ext is not None else (
@@ -185,7 +196,7 @@ def write_benchmark_stats(
         "sample_name": sample_name,
         "dataset": dataset,
         "runtime": {
-            "total_seconds": _f(getattr(timer, "total_seconds", None)),
+            "total_seconds": _f(_total),
             "method_seconds": _f(getattr(method_stage, "seconds", None)) if method_stage else None,
             "by_stage_seconds": by_stage,
         },

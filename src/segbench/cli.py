@@ -18,6 +18,8 @@ import os
 import shutil
 import subprocess
 import sys
+
+import pandas as pd
 from pathlib import Path
 
 from . import REPO_ROOT, __version__
@@ -264,6 +266,50 @@ def cmd_evaluate(args: argparse.Namespace) -> int:
         tx = next(iter(sorted(d.glob("outputs/*_standardized.parquet"))), None)
         ev.entity_metrics(row, stats, tx)
         ev.tracer_conflict_purity(row, d)
+
+        # --- reference-based metrics -----------------------------------
+        # RCTD is the single label source: its dominant_celltype feeds both
+        # the Kendall and the marker comparison, so no method gets its own
+        # label transfer and the columns stay comparable.
+        cell_h5ad = next(iter(sorted(d.glob("outputs/*cell_by_gene.h5ad"))), None)
+        rscript = envs.resolve("split", "rscript") or envs.resolve("celladmix", "rscript")
+        if args.skip_rctd:
+            row.na("rctd_entropy_median", "skipped (--skip-rctd)")
+        elif not (ref and ct_col and cell_h5ad and rscript):
+            missing = ("no cell_by_gene.h5ad" if not cell_h5ad else
+                       "no Rscript configured" if not rscript else
+                       "no reference/celltype column")
+            row.na("rctd_entropy_median", missing)
+            row.na("kendall_tau_median", missing)
+            row.na("marker_logfc_median", missing)
+        else:
+            rdir = d / "rctd"
+            per_cell = rdir / "rctd_cell_assignments_post.tsv"
+            if not per_cell.exists():
+                print(f"    running RCTD for {row.method} ...")
+                res = ev.run_rctd(
+                    cell_h5ad=cell_h5ad, reference_h5ad=Path(ref),
+                    celltype_col=ct_col, outdir=rdir, rscript=rscript,
+                    exclude_celltypes=dropped, cores=args.rctd_cores)
+                for k, v in res.items():
+                    row.set(k, v)
+            if per_cell.exists():
+                if "rctd_entropy_median" not in row.values:
+                    df_rc = pd.read_csv(per_cell, sep="\t")
+                    row.set("rctd_entropy_median",
+                            float(pd.to_numeric(df_rc["entropy"], errors="coerce").median()))
+                    row.set("rctd_max_weight_median",
+                            float(pd.to_numeric(df_rc["max_weight"], errors="coerce").median()))
+                ev.reference_consistency(
+                    row, cell_h5ad=cell_h5ad, rctd_per_cell=per_cell,
+                    reference_h5ad=Path(ref), celltype_col=ct_col, kept_types=kept)
+                ev.marker_specificity(
+                    row, cell_h5ad=cell_h5ad, rctd_per_cell=per_cell,
+                    reference_h5ad=Path(ref), celltype_col=ct_col, kept_types=kept)
+            else:
+                for k in ("kendall_tau_median", "marker_logfc_median"):
+                    row.na(k, "RCTD produced no per-cell table")
+
         row.set("run_dir", str(d))
         rows.append(row)
         print(f"  scored {row.method}")
@@ -349,6 +395,9 @@ def build_parser() -> argparse.ArgumentParser:
     pe.add_argument("--min-reference-cells", type=int,
                     default=50, help="drop reference cell types below this "
                                        "count from RCTD/marker metrics")
+    pe.add_argument("--skip-rctd", action="store_true",
+                    help="skip RCTD (and the metrics that depend on its labels)")
+    pe.add_argument("--rctd-cores", type=int, default=4)
     pe.add_argument("--no-plots", action="store_true")
     pe.set_defaults(func=cmd_evaluate)
 

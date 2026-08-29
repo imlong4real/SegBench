@@ -145,48 +145,29 @@ def entity_metrics(row: EvalRow, stats: dict, transcripts: Path | None) -> None:
 def _tracer_whole_partial(row: EvalRow, transcripts: Path) -> None:
     """Split TRACER entities into whole vs partial cells.
 
-    TRACER marks fragments it could not stitch into a whole cell; pooling them
-    with whole cells would make mean-transcripts-per-profile incomparable with
-    methods that only emit whole cells.
+    TRACER labels every transcript with `_etype` ("cell" / "partial" /
+    "unknown"); that is the authoritative signal. Pooling whole and partial
+    entities would make mean-transcripts-per-profile incomparable with methods
+    that emit only whole cells, so they are reported separately.
     """
     try:
         df = pd.read_parquet(transcripts)
     except Exception as exc:
         row.notes["n_whole_cells"] = f"unreadable transcripts: {exc}"
         return
-    col = next((c for c in ("tracer_id", "stitched", "cell_id")
-                if c in df.columns), None)
-    if col is None:
+    if "_etype" not in df.columns or "cell_id" not in df.columns:
+        row.notes["n_whole_cells"] = "no _etype column in TRACER output"
         return
-    cid = df[col].astype(str)
-    assigned = cid[cid != "UNASSIGNED"]
-    if not len(assigned):
-        return
-    # TRACER labels every transcript's entity type directly; that is
-    # authoritative and avoids guessing from the id string.
-    if "_etype" in df.columns:
-        etype = df.loc[assigned.index, "_etype"].astype(str)
-        whole_mask = etype.eq("cell")
-    else:
-        try:
-            import sys
-            sys.path.insert(0, str(Path(REPO_ROOT).parent / "TRACER" / "src"))
-            from tracer.plot import is_whole_cell_id
-            whole_mask = is_whole_cell_id(assigned)
-        except Exception:
-            # Last resort: the documented id convention for fragments.
-            whole_mask = ~assigned.str.contains(r"[_:\-](frag|part|p)\d+$",
-                                                regex=True)
-
-    whole_ids = assigned[whole_mask]
-    part_ids = assigned[~whole_mask]
-    n_whole, n_part = whole_ids.nunique(), part_ids.nunique()
+    et = df["_etype"].astype(str)
+    cid = df["cell_id"].astype(str)
+    whole, part = cid[et == "cell"], cid[et == "partial"]
+    n_whole, n_part = whole.nunique(), part.nunique()
     row.set("n_whole_cells", int(n_whole))
     row.set("n_partial_cells", int(n_part))
     row.set("mean_transcripts_per_whole_cell",
-            float(len(whole_ids)) / n_whole if n_whole else np.nan)
+            float(len(whole)) / n_whole if n_whole else np.nan)
     row.set("mean_transcripts_per_partial_cell",
-            float(len(part_ids)) / n_part if n_part else np.nan)
+            float(len(part)) / n_part if n_part else np.nan)
 
 
 def runtime_metrics(row: EvalRow, stats: dict) -> None:
