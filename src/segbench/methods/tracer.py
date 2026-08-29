@@ -609,9 +609,17 @@ def _tracer_entity_accounting(df, *, entity_kind="cell"):
     cid = df["cell_id"].astype(str)
     whole, part = cid[et == "cell"], cid[et == "partial"]
     assigned = cid[et.isin(_ASSIGNED_ETYPES)]
+    whole_ids, part_ids = set(whole.unique()), set(part.unique())
     out["n_entities"] = int(assigned.nunique())
-    out["n_whole_cells"] = int(whole.nunique())
-    out["n_partial_cells"] = int(part.nunique())
+    out["n_whole_cells"] = len(whole_ids)
+    out["n_partial_cells"] = len(part_ids)
+    # `_etype` is per TRANSCRIPT, so one cell_id can carry both whole and
+    # partial transcripts — on the kidney run 45,434 of 45,462 partial ids are
+    # also whole ids. The two counts therefore OVERLAP and must not be summed.
+    # n_partial_only_cells is the disjoint quantity: entities that are nothing
+    # but fragments.
+    out["n_partial_only_cells"] = len(part_ids - whole_ids)
+    out["n_whole_and_partial_cells"] = len(whole_ids & part_ids)
     if "feature_name" in df.columns:
         out["n_genes"] = int(df["feature_name"].astype(str).nunique())
     if len(assigned):

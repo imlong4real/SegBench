@@ -56,6 +56,30 @@ resolution. `feature_name` is the placeholder `__bin__` because a bin carries a
 whole expression vector. `entity_kind` is `bin` in the stats file, and
 "assigned" means the bin fell inside a called cell.
 
+### TRACER's whole vs partial entities overlap
+
+TRACER's `_etype` is a **per-transcript** label, so one `cell_id` can carry
+both whole-cell and partial transcripts. The two counts therefore describe
+overlapping sets and **must not be summed**:
+
+| run | whole | partial | partial-only | both |
+|---|---:|---:|---:|---:|
+| NSCLC Xenium | 54,546 | 2,972 | 180 | 2,792 |
+| kidney Visium HD | 147,558 | 45,462 | 28 | 45,434 |
+
+`n_entities` is the union, not the sum. `n_partial_only_cells` is the disjoint
+quantity — entities that are nothing but fragments — and is usually far smaller
+than `n_partial_cells` suggests. Read together:
+
+* `n_whole_cells` — entities with at least one whole-cell transcript
+* `n_partial_cells` — entities with at least one partial transcript
+* `n_partial_only_cells` — entities with *no* whole-cell transcript
+* `n_whole_and_partial_cells` — entities carrying both
+
+`mean_transcripts_per_whole_cell` and `mean_transcripts_per_partial_cell` are
+computed over the transcripts of each `_etype`, so they remain well-defined
+even though the entity sets overlap.
+
 ## 2. The statistics contract
 
 `benchmark_stats.json` is the only file the aggregator reads.

@@ -143,6 +143,7 @@ def entity_metrics(row: EvalRow, stats: dict, transcripts: Path | None) -> None:
     # it is authoritative and needs no re-read of a large parquet. Fall back
     # to deriving them only when the stats file predates that.
     split_keys = ("n_whole_cells", "n_partial_cells",
+                  "n_partial_only_cells", "n_whole_and_partial_cells",
                   "mean_transcripts_per_whole_cell",
                   "mean_transcripts_per_partial_cell")
     if any(k in ents for k in split_keys):
@@ -317,6 +318,7 @@ def build_table(rows: list[EvalRow]) -> pd.DataFrame:
             "n_entities", "n_whole_cells", "n_partial_cells",
             "mean_transcripts_per_profile",
             "mean_transcripts_per_whole_cell", "mean_transcripts_per_partial_cell",
+            "n_partial_only_cells", "n_whole_and_partial_cells",
             "n_transcripts_total", "n_transcripts_assigned",
             "n_transcripts_unassigned", "frac_assigned",
             "rctd_entropy_median", "rctd_max_weight_median",
