@@ -1,0 +1,16 @@
+# Visium HD sample (sequencing / binned). Template — edit the paths.
+dataset:
+  name: visium_hd_demo
+  platform: visium_hd
+  modality: sequencing
+sample_name: VisiumHD_demo
+
+inputs:
+  # 2um bin matrix from spaceranger.
+  input_h5ad: ${SEGBENCH_DATA}/visium_hd/square_002um/filtered_feature_bc_matrix.h5
+  spaceranger_dir: ${SEGBENCH_DATA}/visium_hd/square_002um
+  # Full-resolution H&E used for StarDist segmentation.
+  source_image: ${SEGBENCH_DATA}/visium_hd/Visium_HD_He.tif
+  # Optional: skip StarDist by supplying a precomputed label image.
+  labels_npz: null
+  reference_h5ad: null

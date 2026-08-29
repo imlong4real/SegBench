@@ -60,12 +60,12 @@ run_timed() {
 }
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
-REPO_DIR="/weka/home/lyuan13/segmentation_benchmark_pipeline"
+REPO_DIR="${SEGBENCH_REPO_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../.." && pwd)}"
 XENIUM_BASE="${REPO_DIR}/results/segger_smoke/input/xenium_bundle/TSU-20"
 EXTRA_PKGS="${REPO_DIR}/results/segger_smoke/.site_packages"
 
 # Container-visible paths (Apptainer auto-binds /home/lyuan13 → $HOME)
-REPO_CONT="/home/lyuan13/segmentation_benchmark_pipeline"
+REPO_CONT="${SEGBENCH_REPO_CONT:-$REPO_DIR}"
 XENIUM_BASE_CONT="${REPO_CONT}/results/segger_smoke/input/xenium_bundle/TSU-20"
 EXTRA_PKGS_CONT="${REPO_CONT}/results/segger_smoke/.site_packages"
 

@@ -1,0 +1,14 @@
+# Fast wiring check: every imaging method on a 50k-transcript subsample.
+# Methods whose external tools are missing are SKIPPED, not failed, so this
+# suite is safe to run anywhere as a plumbing test.
+#   segbench suite smoke --dataset tsu20_xenium
+name: smoke
+dataset: tsu20_xenium
+outdir: benchmark_output/smoke
+methods:
+  - name: baysor
+    args: ["--max-transcripts", "50000", "--min-molecules-per-cell", "10"]
+  - name: proseg
+    args: ["--max-transcripts", "50000"]
+  - name: celladmix
+    args: ["--max-transcripts", "50000"]

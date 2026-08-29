@@ -1,0 +1,10 @@
+# TRACER on binned sequencing data (Visium HD / Stereo-seq).
+# Entities are bins, so the per-entity thresholds are lower than the imaging
+# defaults: a 2um bin holds far fewer counts than a segmented cell.
+method: tracer_seq
+threads: 4
+tracer:
+  platform: visium_hd
+  pmi_threshold: 0.2
+  tau: 0.05
+  min_tx_per_cell_for_scores: 3

@@ -82,13 +82,10 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-_REPO_ROOT = Path(__file__).resolve().parents[1]
-_HERE = Path(__file__).resolve().parent
-for _p in (str(_HERE), str(_REPO_ROOT / "src"), str(_REPO_ROOT)):
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
-
-import _runner_common as rc  # noqa: E402
+from .. import REPO_ROOT as _REPO_ROOT
+from .. import common as rc
+from .. import stats as stx
+from . import _base
 
 METHOD = "baysor"
 DEFAULT_CONFIG = _REPO_ROOT / "workflow" / "configs" / "baysor_xenium.toml"
@@ -105,7 +102,8 @@ _BX, _BY, _BZ, _BGENE, _BPRIOR = "x", "y", "z", "gene", "prior_cell"
 def build_argparser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    rc.add_shared_args(p)
+    _base.add_common_args(p, method=METHOD)
+    _base.add_transcript_input_args(p)
     p.add_argument("--mode", choices=("run", "wrap"), default="run",
                    help="run: execute Baysor from transcripts (publication-grade, "
                         "DEFAULT). wrap: standardize an existing segmentation.csv "
@@ -113,7 +111,7 @@ def build_argparser() -> argparse.ArgumentParser:
     p.add_argument("--baysor-bin", default=shutil.which("baysor") or "baysor",
                    help="Path to the baysor binary (default: from PATH; "
                         "~/.julia/bin/baysor is also probed).")
-    p.add_argument("--config", "--baysor-config", dest="config", type=Path, default=None,
+    p.add_argument("--baysor-config", dest="baysor_config", type=Path, default=None,
                    help="Baysor TOML config to use as-is. If omitted, a config is "
                         "generated under inputs/baysor_config.toml from the CLI "
                         "options (template: workflow/configs/baysor_xenium.toml).")
@@ -125,7 +123,7 @@ def build_argparser() -> argparse.ArgumentParser:
                         "with --use-prior). Default 0.5.")
     p.add_argument("--min-molecules-per-cell", type=int, default=50,
                    help="Baysor -m/--min-molecules-per-cell. Default 50.")
-    p.add_argument("--n-threads", "--nthreads", dest="n_threads", type=int, default=4,
+    p.add_argument("--n-threads", "--nthreads", dest="n_threads", type=int, default=None,
                    help="JULIA_NUM_THREADS for Baysor. Default 4.")
     p.add_argument("--tempdir", type=Path, default=None,
                    help="Directory for Baysor/Julia temp files (sets TMPDIR).")
@@ -196,9 +194,9 @@ def write_baysor_config(dest: Path, args: argparse.Namespace, scale: float | Non
                         *, log) -> Path:
     """Use --config as-is (copied for provenance) or generate one under inputs/."""
     dest.parent.mkdir(parents=True, exist_ok=True)
-    if args.config is not None:
-        shutil.copy2(args.config, dest)
-        log.info("Using supplied Baysor config: %s (copied to %s)", args.config, dest)
+    if args.baysor_config is not None:
+        shutil.copy2(args.baysor_config, dest)
+        log.info("Using supplied Baysor config: %s (copied to %s)", args.baysor_config, dest)
         return dest
     # exclude_genes is "" so every input molecule survives into segmentation.csv,
     # keeping the molecule_id <-> input-row mapping bijective (the standardized
@@ -278,8 +276,13 @@ def standardize_baysor_segmentation(
     return rc.standardize_transcripts(frame, method=METHOD, log=log)
 
 
-def main() -> int:
-    args = build_argparser().parse_args()
+def main(argv: list[str] | None = None) -> int:
+    args = build_argparser().parse_args(argv)
+    _base.resolve_config(args, method=METHOD)
+    if args.dry_run:
+        print(f"[dry-run] {METHOD}: transcripts={args.transcripts} "
+              f"sample={args.sample_name} threads={args.threads} -> {args.outdir}")
+        return 0
     if args.n_transcripts_smoke is not None:
         args.max_transcripts = args.n_transcripts_smoke
 
@@ -472,6 +475,21 @@ def main() -> int:
              args.mode, timer.total_seconds,
              f"{baysor_wall:.1f}s" if baysor_wall is not None else "n/a",
              n_baysor_cells)
+    stx.write_benchmark_stats(
+        outdir=args.outdir, method=METHOD, modality="imaging",
+        sample_name=args.sample_name, timer=timer, dataset=args.dataset,
+        transcripts=stx.transcript_accounting(std, n_input=n_input),
+        entities=stx.entity_accounting(std, n_entities=n_baysor_cells),
+        qc={"mode": args.mode,
+            "scale": eff_scale,
+            "min_molecules_per_cell": int(args.min_molecules_per_cell),
+            "prior_segmentation_confidence": float(args.prior_segmentation_confidence),
+            "runtime_valid_for_benchmark": args.mode == "run"},
+        method_version=bversion,
+        outputs=[str(std_path)],
+        notes=("Real Baysor execution; runtime/memory are benchmark-valid."
+               if args.mode == "run" else
+               "WRAP mode: pre-existing output standardized, runtime NOT benchmark-valid."))
     return 0
 
 

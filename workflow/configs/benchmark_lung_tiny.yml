@@ -45,7 +45,7 @@ methods:
   ovrlpy: false
 
 tracer:
-  repo_path: /Users/lyuan13/Desktop/TRACER
+  repo_path: ${TRACER_HOME}   # export TRACER_HOME=/path/to/TRACER
   mode: refine_existing_segmentation
   enable_seg_residual_cascade: true
   enable_noseg_cascade: false

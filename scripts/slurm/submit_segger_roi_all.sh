@@ -12,7 +12,8 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."   # repo root
 
-BENCH_DATA="/home/lyuan13/scratchadeshpa6/benchmark_data"
+REPO_DIR="$PWD"
+BENCH_DATA="${SEGBENCH_DATA:-$REPO_DIR/dataset}"
 MERFISH_UM="${BENCH_DATA}/merfish_mouse_ileum/tracer_seg/input_transcripts_um.parquet"
 
 declare -A TOK=(   [atera_cervical]=17500 [cosmx_nsclc]=1000 [merfish_mouse_ileum]=250  [xenium5k_cervical]=5000 )

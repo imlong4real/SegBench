@@ -59,13 +59,10 @@ import pandas as pd
 # This file lives at <repo>/workflow/scripts/run_split.py, so the repo root is
 # parents[2] (parents[1] is the `workflow` dir). R_SCRIPT/provenance paths are
 # built relative to the true repo root.
-_REPO_ROOT = Path(__file__).resolve().parents[2]
-_HERE = Path(__file__).resolve().parent
-for _p in (str(_HERE), str(_REPO_ROOT / "src"), str(_REPO_ROOT)):
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
-
-import _runner_common as rc  # noqa: E402
+from .. import REPO_ROOT as _REPO_ROOT
+from .. import common as rc
+from .. import stats as stx
+from . import _base
 
 METHOD = "split"
 R_SCRIPT = _REPO_ROOT / "workflow" / "scripts" / "_count_correction" / "run_split_tsu20_real.R"
@@ -118,7 +115,8 @@ _COMPARTMENT_KEYWORDS = {
 def build_argparser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    rc.add_shared_args(p)
+    _base.add_common_args(p, method=METHOD)
+    _base.add_transcript_input_args(p)
     p.add_argument("--r-env", default="tracer_benchmark_r",
                    help="conda env with SPLIT + spacexr + Seurat.")
     p.add_argument("--common-inputs", default="results/tsu20_tools/common_inputs")
@@ -128,7 +126,8 @@ def build_argparser() -> argparse.ArgumentParser:
     p.add_argument("--features-tsv", type=Path, default=None,
                    help="Gene list matching purified_counts rows "
                         "(default: <common-inputs>/xenium_features.tsv).")
-    p.add_argument("--cores", type=int, default=2)
+    p.add_argument("--cores", type=int, default=None,
+                   help="R worker cores (default: --threads).")
     p.add_argument("--umi-min", type=int, default=10)
     p.add_argument("--counts-min", type=int, default=10)
     return p
@@ -410,8 +409,13 @@ def _write_rctd_entropy_metrics(cm: pd.DataFrame, out_path: Path, log) -> bool:
     return True
 
 
-def main() -> int:
-    args = build_argparser().parse_args()
+def main(argv: list[str] | None = None) -> int:
+    args = build_argparser().parse_args(argv)
+    _base.resolve_config(args, method=METHOD)
+    if args.dry_run:
+        print(f"[dry-run] {METHOD}: transcripts={args.transcripts} "
+              f"sample={args.sample_name} threads={args.threads} -> {args.outdir}")
+        return 0
     sentinel = args.outdir / "outputs" / "split_cell_by_gene.h5ad"
     rc.prepare_outdir(args.outdir, sentinel, args.overwrite)
     log = rc.setup_logging(args.outdir, "run_split")
@@ -591,6 +595,27 @@ def main() -> int:
             log=log, summary_extra_lines=notes)
 
     log.info("DONE. Total wall: %.1fs", timer.total_seconds)
+    stx.write_benchmark_stats(
+        outdir=args.outdir, method=METHOD, modality="imaging",
+        sample_name=args.sample_name, timer=timer, dataset=args.dataset,
+        transcripts={"n_total": None, "n_assigned": None, "n_unassigned": None,
+                     "frac_assigned": None,
+                     "n_input": pruning.get("original_assigned_count_all_cells"),
+                     "delta_vs_input": None,
+                     "note": "SPLIT is cell-level: fractional expected counts, "
+                             "so per-transcript assignment is not recoverable."},
+        entities=stx.entity_accounting(
+            None, entity_kind="cell",
+            n_entities=pruning.get("n_cells_purified"),
+            n_genes=pruning.get("n_genes_purified")),
+        qc={"transcript_level": False,
+            "estimated_removed_counts": pruning.get("estimated_removed_count"),
+            "frac_counts_removed": pruning.get("fraction_removed_of_original_assigned"),
+            "n_cells_purified": pruning.get("n_cells_purified"),
+            "purified_counts_are_fractional": pruning.get("purified_counts_are_fractional")},
+        outputs=list(outs),
+        notes="Cell-level method: score with get_cell_level_metric.py, "
+              "not the transcript-level get_metric.py.")
     return 0
 
 

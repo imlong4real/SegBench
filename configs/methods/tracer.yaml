@@ -1,0 +1,8 @@
+# TRACER on molecule-resolved (imaging) data.
+method: tracer
+threads: 4
+tracer:
+  platform: xenium
+  pmi_threshold: 0.2
+  tau: 0.05
+  min_tx_per_cell_for_scores: 5

@@ -1,0 +1,8 @@
+# Sequencing-modality methods (Visium HD and friends).
+#   segbench suite sequencing_full --dataset visium_hd_demo
+name: sequencing_full
+dataset: visium_hd_demo
+outdir: benchmark_output/sequencing_full
+methods:
+  - bin2cell
+  - tracer_seq

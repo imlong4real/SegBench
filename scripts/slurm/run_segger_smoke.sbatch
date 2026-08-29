@@ -11,13 +11,13 @@
 
 set -euo pipefail
 
-REPO_DIR="/weka/home/lyuan13/segmentation_benchmark_pipeline"
+REPO_DIR="${SEGBENCH_REPO_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../.." && pwd)}"
 # Full Xenium bundle — real TSU-20 data, ~28 MB transcripts, ~2.9 MB nucleus_boundaries.
 XENIUM_BASE="${REPO_DIR}/results/segger_smoke/input/xenium_bundle/TSU-20"
 # extra site-packages already populated here; reuse to avoid re-copying.
 EXTRA_PKGS="${REPO_DIR}/results/segger_smoke/.site_packages"
 # Container-visible paths: Apptainer auto-binds $HOME=/home/lyuan13, NOT /weka/home/.
-REPO_CONT="/home/lyuan13/segmentation_benchmark_pipeline"
+REPO_CONT="${SEGBENCH_REPO_CONT:-$REPO_DIR}"
 XENIUM_BASE_CONT="${REPO_CONT}/results/segger_smoke/input/xenium_bundle/TSU-20"
 EXTRA_PKGS_CONT="${REPO_CONT}/results/segger_smoke/.site_packages"
 # Output root for this full run.

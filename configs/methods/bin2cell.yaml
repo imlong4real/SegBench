@@ -1,0 +1,14 @@
+# Bin2Cell (Visium HD 2um bins -> cells).
+method: bin2cell
+threads: 4
+bin2cell:
+  mpp: 0.5
+  prob_thresh: 0.01
+  nms_thresh: 0.5
+  stardist_model: 2D_versatile_he
+  prob_thresh_gex: 0.05
+  stardist_model_gex: 2D_versatile_fluo
+  use_gex: false
+  expand_microns: 2.0
+  min_counts: 1
+  no_destripe: false

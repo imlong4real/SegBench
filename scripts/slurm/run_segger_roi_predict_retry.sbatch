@@ -49,9 +49,9 @@ run_timed() {
     fi
 }
 
-REPO_DIR="/weka/home/lyuan13/segmentation_benchmark_pipeline"
+REPO_DIR="${SEGBENCH_REPO_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../.." && pwd)}"
 EXTRA_PKGS="${REPO_DIR}/results/segger_smoke/.site_packages"
-REPO_CONT="/home/lyuan13/segmentation_benchmark_pipeline"
+REPO_CONT="${SEGBENCH_REPO_CONT:-$REPO_DIR}"
 EXTRA_PKGS_CONT="${REPO_CONT}/results/segger_smoke/.site_packages"
 
 OUT_ROOT="${REPO_DIR}/results/segger_roi/${DATASET}"

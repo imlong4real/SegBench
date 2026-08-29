@@ -1,0 +1,38 @@
+Usage: train_model.py [OPTIONS]
+
+  Train the Segger segmentation model.
+
+Options:
+  --dataset_dir TEXT              Directory containing the processed Segger
+                                  dataset.  [required]
+  --models_dir TEXT               Directory to save the trained model and the
+                                  training logs.  [required]
+  --sample_tag TEXT               Sample tag for the dataset.  [required]
+  --init_emb INTEGER              Size of the embedding layer.  [default: 8]
+  --hidden_channels INTEGER       Size of hidden channels in the model.
+                                  [default: 32]
+  --num_tx_tokens INTEGER         Number of transcript tokens.  [default: 500]
+  --out_channels INTEGER          Number of output channels.  [default: 8]
+  --heads INTEGER                 Number of attention heads.  [default: 2]
+  --num_mid_layers INTEGER        Number of mid layers in the model.
+                                  [default: 2]
+  --batch_size INTEGER            Batch size for training.  [default: 4]
+  --num_workers INTEGER           Number of workers for data loading.
+                                  [default: 2]
+  --accelerator TEXT              Device type to use for training (e.g.,
+                                  "cuda", "cpu").  [default: cuda]
+  --max_epochs INTEGER            Number of epochs for training.  [default:
+                                  200]
+  --save_best_model BOOLEAN       Whether to save the best model.  [default:
+                                  True]
+  --learning_rate FLOAT           Learning rate for training.  [default: 1e-3]
+  --pretrained_model_dir TEXT     Directory containing the pretrained model to
+                                  use (if any).
+  --pretrained_model_version INTEGER
+                                  Version of pretrained model.
+  --devices INTEGER               Number of devices (GPUs) to use.  [default:
+                                  4]
+  --strategy TEXT                 Training strategy for the trainer.
+                                  [default: auto]
+  --precision TEXT                Precision for training.  [default: 16-mixed]
+  --help                          Show this message and exit.

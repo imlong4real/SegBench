@@ -10,6 +10,7 @@ source-data builder and the plotting script agree byte-for-byte.
 """
 from __future__ import annotations
 
+import os
 from pathlib import Path
 import numpy as np
 import pandas as pd
@@ -17,7 +18,8 @@ import pandas as pd
 # --------------------------------------------------------------------------- #
 # Paths
 # --------------------------------------------------------------------------- #
-ROOT = Path("/Users/lyuan13/Desktop/segmentation_benchmark_pipeline")
+ROOT = Path(os.environ.get("SEGBENCH_ROOT",
+                           Path(__file__).resolve().parents[2]))
 BENCH = ROOT / "results/benchmark/lung_xenium_ref36973297"
 METRICS = BENCH / "metrics"
 SUMMARY = BENCH / "summary"

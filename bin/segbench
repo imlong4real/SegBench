@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# segbench launcher — runs the suite without needing `pip install`.
+#
+# Resolves the repo from this script's own location, puts <repo>/src on
+# PYTHONPATH, and hands over to the CLI. Set SEGBENCH_PYTHON to pick a
+# specific interpreter (e.g. a conda env python).
+set -euo pipefail
+
+_src="${BASH_SOURCE[0]}"
+while [ -L "$_src" ]; do
+  _dir="$(cd -P "$(dirname "$_src")" && pwd)"
+  _src="$(readlink "$_src")"
+  [[ "$_src" != /* ]] && _src="$_dir/$_src"
+done
+REPO_ROOT="$(cd -P "$(dirname "$_src")/.." && pwd)"
+
+PY="${SEGBENCH_PYTHON:-}"
+if [ -z "$PY" ]; then
+  for cand in python3 python; do
+    if command -v "$cand" >/dev/null 2>&1; then PY="$cand"; break; fi
+  done
+fi
+if [ -z "$PY" ]; then
+  echo "segbench: no python interpreter found. Set SEGBENCH_PYTHON." >&2
+  exit 127
+fi
+
+export PYTHONPATH="${REPO_ROOT}/src${PYTHONPATH:+:${PYTHONPATH}}"
+exec "$PY" -m segbench "$@"

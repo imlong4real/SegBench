@@ -19,13 +19,15 @@ Outputs:
 """
 from __future__ import annotations
 import json, logging, sys
+import os
 from pathlib import Path
 import numpy as np
 import pandas as pd
 import anndata as ad
 from scipy.stats import pearsonr
 
-ROOT = Path("/Users/lyuan13/Desktop/segmentation_benchmark_pipeline")
+ROOT = Path(os.environ.get("SEGBENCH_ROOT",
+                           Path(__file__).resolve().parents[2]))
 sys.path.insert(0, str(ROOT / "workflow" / "scripts"))
 import get_metric  # reuse the exact KNN label-transfer used for all other methods
 

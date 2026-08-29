@@ -1,0 +1,7 @@
+# SPLIT (RCTD-based purification). Cell-level method: no per-transcript output.
+method: split
+threads: 2
+split:
+  r_env: tracer_benchmark_r
+  umi_min: 10
+  counts_min: 10

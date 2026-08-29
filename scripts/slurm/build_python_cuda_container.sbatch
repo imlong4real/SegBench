@@ -11,7 +11,7 @@
 
 set -euo pipefail
 
-REPO_DIR="/weka/home/lyuan13/segmentation_benchmark_pipeline"
+REPO_DIR="${SEGBENCH_REPO_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../.." && pwd)}"
 
 echo "[$(date)] Starting container build on node $(hostname)"
 echo "[$(date)] Apptainer version: $(apptainer --version)"

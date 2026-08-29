@@ -34,13 +34,10 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-_REPO_ROOT = Path(__file__).resolve().parents[1]
-_HERE = Path(__file__).resolve().parent
-for _p in (str(_HERE), str(_REPO_ROOT / "src"), str(_REPO_ROOT)):
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
-
-import _runner_common as rc  # noqa: E402
+from .. import REPO_ROOT as _REPO_ROOT
+from .. import common as rc
+from .. import stats as stx
+from . import _base
 
 METHOD = "proseg"
 EXCLUDE_GENES = r"^(BLANK_|NegControl|antisense_|UnassignedCodeword|Codeword|DeprecatedCodeword)"
@@ -49,10 +46,12 @@ EXCLUDE_GENES = r"^(BLANK_|NegControl|antisense_|UnassignedCodeword|Codeword|Dep
 def build_argparser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    rc.add_shared_args(p)
+    _base.add_common_args(p, method=METHOD)
+    _base.add_transcript_input_args(p)
     p.add_argument("--proseg-bin", default=shutil.which("proseg") or "proseg",
                    help="Path to the proseg binary (default: from PATH).")
-    p.add_argument("--nthreads", type=int, default=4)
+    p.add_argument("--nthreads", type=int, default=None,
+                   help="proseg threads (default: --threads).")
     p.add_argument("--voxel-layers", type=int, default=4,
                    help="proseg --voxel-layers (z-axis voxel layers).")
     p.add_argument("--extra-proseg-args", default="",
@@ -60,8 +59,13 @@ def build_argparser() -> argparse.ArgumentParser:
     return p
 
 
-def main() -> int:
-    args = build_argparser().parse_args()
+def main(argv: list[str] | None = None) -> int:
+    args = build_argparser().parse_args(argv)
+    _base.resolve_config(args, method=METHOD)
+    if args.dry_run:
+        print(f"[dry-run] {METHOD}: transcripts={args.transcripts} "
+              f"sample={args.sample_name} threads={args.threads} -> {args.outdir}")
+        return 0
     sentinel = args.outdir / "outputs" / f"{METHOD}_transcripts_standardized.parquet"
     rc.prepare_outdir(args.outdir, sentinel, args.overwrite)
     log = rc.setup_logging(args.outdir, "run_proseg")
@@ -221,6 +225,17 @@ def main() -> int:
                 "directly transcript-level and safe to pass to get_metric.py."])
 
     log.info("DONE. Total wall: %.1fs", timer.total_seconds)
+    stx.write_benchmark_stats(
+        outdir=args.outdir, method=METHOD, modality="imaging",
+        sample_name=args.sample_name, timer=timer, dataset=args.dataset,
+        transcripts=stx.transcript_accounting(std, n_input=len(df_in)),
+        entities=stx.entity_accounting(std, n_entities=int(len(cm))),
+        qc={"n_proseg_cells": int(len(cm)),
+            "voxel_layers": int(args.voxel_layers),
+            "excluded_genes_regex": EXCLUDE_GENES},
+        method_version=proseg_version,
+        outputs=[str(std_path)] + ([str(h5ad_path)] if h5ad_ok else []),
+        notes="De-novo transcript-level segmentation; output is transcript-level.")
     return 0
 
 

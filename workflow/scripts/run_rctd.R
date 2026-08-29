@@ -33,7 +33,8 @@
 #   spacexr           (Stickels et al.)
 #   anndata           (CRAN)  — reads .h5ad
 #   optparse, jsonlite, Matrix, readr
-# Recommended: /Users/lyuan13/anaconda3/envs/tracer_benchmark_r/bin/Rscript
+# Recommended: the Rscript from your `tracer_benchmark_r` conda env
+#   conda run -n tracer_benchmark_r Rscript ...
 # =============================================================================
 
 suppressPackageStartupMessages({

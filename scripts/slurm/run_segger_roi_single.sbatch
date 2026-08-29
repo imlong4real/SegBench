@@ -68,11 +68,11 @@ run_timed() {
 }
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
-REPO_DIR="/weka/home/lyuan13/segmentation_benchmark_pipeline"
-BENCH_DATA="/home/lyuan13/scratchadeshpa6/benchmark_data"
+REPO_DIR="${SEGBENCH_REPO_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../.." && pwd)}"
+BENCH_DATA="${SEGBENCH_DATA:-$REPO_DIR/dataset}"
 EXTRA_PKGS="${REPO_DIR}/results/segger_smoke/.site_packages"
 
-REPO_CONT="/home/lyuan13/segmentation_benchmark_pipeline"
+REPO_CONT="${SEGBENCH_REPO_CONT:-$REPO_DIR}"
 EXTRA_PKGS_CONT="${REPO_CONT}/results/segger_smoke/.site_packages"
 
 # Dataset-specific paths (host)

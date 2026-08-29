@@ -1,0 +1,13 @@
+# Baysor defaults. Override any key with a --config file or a CLI flag.
+method: baysor
+threads: 4
+baysor:
+  mode: run
+  # scale: cell radius in the input's coordinate units. Left unset so the
+  # runner estimates it from nucleus spacing; set it explicitly for
+  # reproducibility on a known sample.
+  scale: null
+  min_molecules_per_cell: 50
+  prior_segmentation_confidence: 0.5
+  use_prior: false
+  extra_baysor_args: ""

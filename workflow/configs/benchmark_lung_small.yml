@@ -55,7 +55,7 @@ methods:
 tracer:
   # Local checkout of the TRACER repo (will be added to PYTHONPATH at runtime).
   # If null, TRACER must be importable from the active python env.
-  repo_path: /Users/lyuan13/Desktop/TRACER
+  repo_path: ${TRACER_HOME}   # export TRACER_HOME=/path/to/TRACER
 
   # 'refine_existing_segmentation' wraps an existing transcript→cell map.
   # Other supported modes (see TRACER docs): 'noseg_cascade', 'seg_residual_cascade'.

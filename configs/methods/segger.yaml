@@ -1,0 +1,20 @@
+# Segger defaults. Segger needs a GPU; on a CPU-only host set accelerator: cpu
+# (very slow, smoke tests only).
+method: segger
+threads: 8
+segger:
+  mode: run
+  tile_width: 200
+  tile_height: 200
+  max_epochs: 3
+  batch_size: 4
+  num_tx_tokens: 500
+  accelerator: cuda
+  devices: 1
+  knn_method: kd_tree
+  model_version: 0
+  use_cc: "False"
+  # Set `container:` to a .sif to run Segger through Apptainer, and
+  # `segger_cli_dir:` to where the CLI scripts live inside it.
+  container: null
+  segger_cli_dir: null

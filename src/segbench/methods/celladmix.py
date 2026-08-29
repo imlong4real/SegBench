@@ -42,13 +42,10 @@ import pandas as pd
 # This file lives at <repo>/workflow/scripts/run_celladmix.py, so the repo root
 # is parents[2] (parents[1] is the `workflow` dir). R_SCRIPT and provenance
 # paths are built relative to the true repo root.
-_REPO_ROOT = Path(__file__).resolve().parents[2]
-_HERE = Path(__file__).resolve().parent
-for _p in (str(_HERE), str(_REPO_ROOT / "src"), str(_REPO_ROOT)):
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
-
-import _runner_common as rc  # noqa: E402
+from .. import REPO_ROOT as _REPO_ROOT
+from .. import common as rc
+from .. import stats as stx
+from . import _base
 
 METHOD = "celladmix"
 R_SCRIPT = _REPO_ROOT / "workflow" / "scripts" / "_count_correction" / "run_celladmix_tsu20_real.R"
@@ -60,7 +57,8 @@ CONCEPT_NOTE = (
 def build_argparser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    rc.add_shared_args(p)
+    _base.add_common_args(p, method=METHOD)
+    _base.add_transcript_input_args(p)
     p.add_argument("--r-env", default="tracer_benchmark_r",
                    help="conda env with the cellAdmix R package.")
     p.add_argument("--xenium-dir", default="dataset/lung_cancer_xenium_10x/TSU-20")
@@ -75,7 +73,8 @@ def build_argparser() -> argparse.ArgumentParser:
     p.add_argument("--nmol-dsamp", type=int, default=10000)
     p.add_argument("--n-cells-nmf", type=int, default=2000)
     p.add_argument("--bridge-cells", type=int, default=200)
-    p.add_argument("--cores", type=int, default=2)
+    p.add_argument("--cores", type=int, default=None,
+                   help="R worker cores (default: --threads).")
     return p
 
 
@@ -103,8 +102,13 @@ def _standardize_celladmix(cleaned: pd.DataFrame, removed: pd.DataFrame, *, log)
     return rc.standardize_transcripts(allt, method=METHOD, log=log)
 
 
-def main() -> int:
-    args = build_argparser().parse_args()
+def main(argv: list[str] | None = None) -> int:
+    args = build_argparser().parse_args(argv)
+    _base.resolve_config(args, method=METHOD)
+    if args.dry_run:
+        print(f"[dry-run] {METHOD}: transcripts={args.transcripts} "
+              f"sample={args.sample_name} threads={args.threads} -> {args.outdir}")
+        return 0
     sentinel = args.outdir / "outputs" / f"{METHOD}_transcripts_standardized.parquet"
     rc.prepare_outdir(args.outdir, sentinel, args.overwrite)
     log = rc.setup_logging(args.outdir, "run_celladmix")
@@ -228,6 +232,18 @@ def main() -> int:
             log=log, summary_extra_lines=notes)
 
     log.info("DONE. Total wall: %.1fs", timer.total_seconds)
+    stx.write_benchmark_stats(
+        outdir=args.outdir, method=METHOD, modality="imaging",
+        sample_name=args.sample_name, timer=timer, dataset=args.dataset,
+        transcripts=stx.transcript_accounting(std),
+        entities=stx.entity_accounting(std),
+        qc={"n_removed_transcripts": int((std["cleaned_status"] == "cleaned_to_unassigned").sum())
+                if "cleaned_status" in std.columns else None,
+            "n_retained_transcripts": int((std["cleaned_status"] == "retained").sum())
+                if "cleaned_status" in std.columns else None,
+            "num_factors": int(args.num_factors)},
+        outputs=[str(std_path)],
+        notes=CONCEPT_NOTE)
     return 0
 
 

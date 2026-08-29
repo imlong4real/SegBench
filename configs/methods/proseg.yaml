@@ -1,0 +1,6 @@
+# proseg defaults.
+method: proseg
+threads: 4
+proseg:
+  voxel_layers: 4
+  extra_proseg_args: ""

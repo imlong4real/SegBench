@@ -1,0 +1,12 @@
+# Every imaging (molecule-resolved) method on one sample.
+#   segbench suite imaging_full --dataset tsu20_xenium --outdir benchmark_output/tsu20
+name: imaging_full
+dataset: tsu20_xenium
+outdir: benchmark_output/imaging_full
+methods:
+  - baysor
+  - proseg
+  - segger
+  - celladmix
+  - split
+  - tracer

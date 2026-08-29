@@ -1,51 +1,115 @@
-# Data and outputs — never tracked.
-dataset/
-results/
-logs/
-benchmark_results/
-outputs/
-docs/
-README_SPLIT_TEMPLATE.md
+# =============================================================================
+# segmentation_benchmark_pipeline — tracked = code, configs, docs.
+# Everything below is generated, machine-specific, or too large for git.
+# =============================================================================
 
-# Snakemake state.
+# --- Input data ---------------------------------------------------------
+# Datasets are never tracked. Point SEGBENCH_DATA at them instead; see
+# configs/datasets/README.md.
+/dataset/
+/datasets/
+/data/
+*.h5ad
+*.h5
+*.zarr/
+*.tif
+*.tiff
+*.ome.tif
+
+# --- Benchmark outputs / results ----------------------------------------
+/results/
+/benchmark_output/
+/benchmark_results/
+/outputs/
+/out/
+NMF_*/
+
+# --- Logs ---------------------------------------------------------------
+/logs/
+*.log
+slurm-*.out
+slurm-*.err
+*.out
+*.err
+
+# --- Intermediates & caches ---------------------------------------------
 .snakemake/
-
-# Conda/Singularity artifacts.
-*.sif
-*.sqsh
-containers/
-.conda/
-
-# Parquet data files.
-*.parquet
-
-# Python cache / editor / OS noise.
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-*.egg-info/
-.pytest_cache/
-.mypy_cache/
+work/
+tmp/
+scratch/
+*.tmp
+*.temp
+.cache/
 .ipynb_checkpoints/
 
-# OS metadata.
-.DS_Store
-Thumbs.db
+# --- Environments & containers ------------------------------------------
+/containers/
+*.sif
+*.sqsh
+*.simg
+.conda/
+conda-env/
+venv/
+.venv/
+env/
+.python-version
 
-# Editor / agent state.
-.vscode/
-.idea/
-.claude/
+# --- Large tabular / matrix artifacts -----------------------------------
+*.parquet
+*.mtx
+*.mtx.gz
+*.csv.gz
+*.tsv.gz
+*.npz
+*.pt
+*.ckpt
 
-# R.
+# --- Python -------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# --- R ------------------------------------------------------------------
 .Rhistory
 .RData
 .Rproj.user/
 renv/library/
-NMF_*/
+renv/staging/
 
-# Local secrets / temp.
+# --- Editors / OS / agents ----------------------------------------------
+.vscode/
+.idea/
+.claude/
+.DS_Store
+Thumbs.db
+*.swp
+
+# --- Local secrets / machine-specific overrides -------------------------
 .env
-*.tmp
-*.log
+configs/local/
+*.local.yaml
+*.local.yml
+
+# =============================================================================
+# Re-included: specific small files the broad rules above would otherwise
+# catch. These are narrow on purpose — a blanket `!dir/**` would also
+# re-include __pycache__, configs/local/ and renv/library/.
+# =============================================================================
+!.gitignore
+!docs/**/*.md
+!docs/**/*.txt
+!configs/**/*.yaml
+!configs/**/*.yml
+!configs/**/*.md
+!workflow/envs/*.yml
+!workflow/configs/*.yml
+!workflow/configs/*.toml
+!reproducibility/**/*.yml
+!reproducibility/**/*.def
+!reproducibility/r/metadata/renv/activate.R
+!resources/**/*.yml

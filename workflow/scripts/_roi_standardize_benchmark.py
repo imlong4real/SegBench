@@ -27,12 +27,14 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import os
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
-ROOT = Path("/Users/lyuan13/Desktop/segmentation_benchmark_pipeline")
+ROOT = Path(os.environ.get("SEGBENCH_ROOT",
+                           Path(__file__).resolve().parents[2]))
 BENCH = ROOT / "results/fig3_cross_platform_roi_benchmark"
 
 DATASETS = {

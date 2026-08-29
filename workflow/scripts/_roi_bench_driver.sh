@@ -7,8 +7,8 @@
 #   dataset = atera_cervical | xenium5k_cervical | cosmx_nsclc | merfish_mouse_ileum
 set -euo pipefail
 export PATH="$HOME/.julia/bin:$HOME/.cargo/bin:$PATH"
-ROOT=/Users/lyuan13/Desktop/segmentation_benchmark_pipeline
-PY=/Users/lyuan13/anaconda3/envs/spatial/bin/python
+ROOT="${SEGBENCH_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
+PY="${SEGBENCH_PYTHON:-python3}"
 cd "$ROOT"
 
 tool=$1; ds=$2

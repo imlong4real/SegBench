@@ -1,0 +1,19 @@
+# Xenium lung-cancer sample TSU-20 (imaging / molecule-resolved).
+# Template: edit the paths, or set SEGBENCH_DATA so they resolve.
+dataset:
+  name: tsu20_xenium
+  platform: xenium
+  modality: imaging
+sample_name: TSU20
+
+inputs:
+  # Standardized transcripts parquet: x, y, feature_name, cell_id [, z, qv].
+  # Build one from a raw Xenium bundle with:
+  #   python workflow/scripts/_benchmark/standardize_method_output.py \
+  #     --method xenium_default --xenium-dir <bundle> --out-dir <dir>
+  transcripts: ${SEGBENCH_DATA}/lung_cancer_xenium_10x/TSU-20/filtered_df_standardized.parquet
+  # Raw Xenium bundle — Segger needs the real nucleus boundaries from it.
+  xenium_dir: ${SEGBENCH_DATA}/lung_cancer_xenium_10x/TSU-20
+  # scRNA reference for SPLIT / cellAdmix / label transfer.
+  reference_h5ad: ${SEGBENCH_DATA}/lung_cancer_scrna_10x/lung_cancer_scrna_split.h5ad
+  reference_celltype_col: cell_type_harmonized

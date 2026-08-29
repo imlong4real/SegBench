@@ -1,0 +1,9 @@
+# cellAdmix (NMF/CRF admixture correction).
+method: celladmix
+threads: 2
+celladmix:
+  num_factors: 10
+  nmol_dsamp: 10000
+  n_cells_nmf: 2000
+  bridge_cells: 200
+  r_env: tracer_benchmark_r

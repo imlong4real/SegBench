@@ -66,10 +66,12 @@ import pandas as pd
 # ---------------------------------------------------------------------------
 # Path bootstrap — let the script run from any cwd.
 # ---------------------------------------------------------------------------
-_REPO_ROOT = Path(__file__).resolve().parents[1]
-for _p in (str(_REPO_ROOT / "src"), str(_REPO_ROOT)):
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
+from .. import REPO_ROOT as _REPO_ROOT
+from .. import common as rc
+from .. import stats as stx
+from . import _base
+
+METHOD = "tracer"
 
 
 # ---------------------------------------------------------------------------
@@ -79,9 +81,9 @@ def build_argparser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    p.add_argument("--transcripts", required=True, type=Path,
+    p.add_argument("--transcripts", type=Path, default=None,
                    help="Standardized transcripts parquet from preprocess_xenium.py.")
-    p.add_argument("--npmi", required=True, type=Path,
+    p.add_argument("--npmi", type=Path, default=None,
                    help="NPMI panel csv(.gz) from build_npmi_from_scrna.py.")
     p.add_argument("--pmi-threshold", type=float, default=None,
                    help="Override the in-pipeline PMI threshold (default: from "
@@ -94,13 +96,22 @@ def build_argparser() -> argparse.ArgumentParser:
                    help="Documentation/provenance — currently informational.")
     p.add_argument("--user-config", type=Path, default=None,
                    help="Optional user-override TOML on top of defaults+platform.")
-    p.add_argument("--outdir", required=True, type=Path)
-    p.add_argument("--sample-name", required=True)
+    p.add_argument("--outdir", type=Path, default=None)
+    p.add_argument("--sample-name", default=None)
     p.add_argument("--seed", type=int, default=1)
     p.add_argument("--min-tx-per-cell-for-scores", type=int, default=5,
                    help="Min transcripts/cell for cell-level purity/conflict scoring.")
     p.add_argument("--tau", type=float, default=0.05,
                    help="NPMI threshold for purity/conflict relu (default 0.05).")
+    p.add_argument("--config", default=None,
+                   help="User config YAML (highest-precedence layer).")
+    p.add_argument("--dataset", default=None,
+                   help="Dataset name (configs/datasets/<name>.yaml) or a path.")
+    p.add_argument("--threads", type=int, default=None)
+    p.add_argument("--max-transcripts", type=int, default=None,
+                   help="Smoke-test helper: subsample the input to N transcripts.")
+    p.add_argument("--dry-run", action="store_true",
+                   help="Validate inputs and config, then stop.")
     p.add_argument("--overwrite", action="store_true",
                    help="If outdir exists, overwrite contents.")
     return p
@@ -450,8 +461,17 @@ def write_outputs(
 # ---------------------------------------------------------------------------
 # Driver
 # ---------------------------------------------------------------------------
-def main() -> int:
-    args = build_argparser().parse_args()
+def main(argv: list[str] | None = None, method: str | None = None) -> int:
+    args = build_argparser().parse_args(argv)
+    method = method or METHOD
+    _base.resolve_config(args, method=method, section="tracer")
+    if args.dry_run:
+        print(f"[dry-run] tracer: transcripts={args.transcripts} npmi={args.npmi} "
+              f"platform={args.platform} -> {args.outdir}")
+        return 0
+    if args.outdir is None:
+        raise SystemExit("--outdir is required (flag or config).")
+    args.outdir = Path(args.outdir)
     args.outdir.mkdir(parents=True, exist_ok=True)
     if any(args.outdir.iterdir()) and not args.overwrite:
         # Allow re-runs: only block when the canonical outputs already exist.
@@ -476,7 +496,7 @@ def main() -> int:
         df = load_transcripts(args.transcripts, log)
     with timer.time("load_npmi"):
         panel = load_npmi_panel(args.npmi, log)
-    with timer.time("run_pipeline"):
+    with timer.time("run_method"):
         df_post, progression, cfg = run_tracer(
             df, panel,
             platform_name=args.platform,
@@ -498,6 +518,26 @@ def main() -> int:
             panel_path=args.npmi, transcripts_path=args.transcripts,
             progression=progression, timer=timer, log=log,
         )
+
+    n_cells = int(adata.n_obs) if adata is not None else None
+    stx.write_benchmark_stats(
+        outdir=args.outdir, method=method,
+        modality="sequencing" if method.endswith("_seq") else "imaging",
+        sample_name=args.sample_name, timer=timer, dataset=args.dataset,
+        transcripts=stx.transcript_accounting(
+            df_post, cell_col="stitched" if "stitched" in df_post.columns else "cell_id",
+            n_input=int(len(df))),
+        entities=stx.entity_accounting(
+            df_post,
+            cell_col="stitched" if "stitched" in df_post.columns else "cell_id",
+            entity_kind="bin" if method.endswith("_seq") else "cell",
+            n_entities=n_cells),
+        qc={"platform": args.platform,
+            "pmi_threshold": args.pmi_threshold,
+            "tau": args.tau,
+            "npmi_panel": str(args.npmi)},
+        outputs=[str(args.outdir / "outputs" / "transcripts_tracer_refined.parquet")],
+        notes="NPMI-guided transcript refinement.")
 
     log.info("DONE. Total wall: %.1fs",
              sum(s.seconds for s in timer.stages))
