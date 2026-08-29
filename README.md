@@ -168,6 +168,18 @@ into the output root.
 
 ### Scoring and comparing
 
+> **Run scoring on a compute node.** `segbench evaluate` loads the scRNA
+> reference and each method's cell-by-gene matrix, and RCTD is memory-hungry.
+> On a cluster with a per-user memory cgroup this is silently OOM-killed on the
+> login node (exit 137, no traceback). Use:
+>
+> ```bash
+> sbatch --cpus-per-task=8 --mem=128G --time=04:00:00 \
+>   --wrap="./bin/segbench evaluate <runs>/<dataset>/methods --dataset <dataset> \
+>           --outdir <runs>/<dataset>/summary --rctd-cores 8"
+> ```
+
+
 `collect` stacks the per-run stats; `evaluate` additionally computes the
 cross-method biological metrics and draws the comparison figures:
 
