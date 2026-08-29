@@ -263,7 +263,12 @@ def cmd_evaluate(args: argparse.Namespace) -> int:
                          entity_kind=stats.get("entity_kind", "cell"),
                          status=stats.get("status", "ok"))
         ev.runtime_metrics(row, stats)
-        tx = next(iter(sorted(d.glob("outputs/*_standardized.parquet"))), None)
+        # TRACER writes transcripts_tracer_refined.parquet, bin2cell writes
+        # *_bin_assignments.parquet; match any per-row table.
+        tx = next((q for pat in ("outputs/*_standardized.parquet",
+                                 "outputs/transcripts_*.parquet",
+                                 "outputs/*_bin_assignments.parquet")
+                   for q in sorted(d.glob(pat))), None)
         ev.entity_metrics(row, stats, tx)
         ev.tracer_conflict_purity(row, d)
 

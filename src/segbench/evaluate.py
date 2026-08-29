@@ -138,7 +138,18 @@ def entity_metrics(row: EvalRow, stats: dict, transcripts: Path | None) -> None:
     else:
         row.set("mean_transcripts_per_profile", np.nan)
 
-    if row.method.startswith("tracer") and transcripts and Path(transcripts).exists():
+    # Whole vs partial entities. The wrapper already computed these from
+    # `_etype` and wrote them into benchmark_stats.json, so prefer that —
+    # it is authoritative and needs no re-read of a large parquet. Fall back
+    # to deriving them only when the stats file predates that.
+    split_keys = ("n_whole_cells", "n_partial_cells",
+                  "mean_transcripts_per_whole_cell",
+                  "mean_transcripts_per_partial_cell")
+    if any(k in ents for k in split_keys):
+        for k in split_keys:
+            if ents.get(k) is not None:
+                row.set(k, ents[k])
+    elif row.method.startswith("tracer") and transcripts and Path(transcripts).exists():
         _tracer_whole_partial(row, Path(transcripts))
 
 
