@@ -77,7 +77,7 @@ METHODS: dict[str, MethodSpec] = {
     ),
     "tracer": MethodSpec(
         name="tracer", module="tracer", modality=IMAGING, kind="refinement",
-        summary="NPMI-guided transcript reassignment / resegmentation.",
+        summary="cPMI-guided transcript reassignment / resegmentation.",
         external_deps=("tracer (python package)",),
         default_config="methods/tracer.yaml", tags=("cleanup",),
     ),

@@ -33,8 +33,7 @@
 #   spacexr           (Stickels et al.)
 #   anndata           (CRAN)  — reads .h5ad
 #   optparse, jsonlite, Matrix, readr
-# Recommended: the Rscript from your `tracer_benchmark_r` conda env
-#   conda run -n tracer_benchmark_r Rscript ...
+# Recommended: /Users/lyuan13/anaconda3/envs/tracer_benchmark_r/bin/Rscript
 # =============================================================================
 
 suppressPackageStartupMessages({
@@ -85,6 +84,10 @@ parse_args_local <- function() {
                 default = 25, help = "Drop reference celltypes below this count."),
     make_option(c("--gene-cutoff"), type = "numeric", default = 0.000125),
     make_option(c("--fc-cutoff"), type = "numeric", default = 0.5),
+    make_option(c("--reference-min-umi"), type = "integer", default = 100,
+                help = "spacexr Reference() min_UMI. Lower for sparse panels (e.g. MERFISH ~236 genes) where whole-transcriptome reference cells fall below the default 100 over the shared panel."),
+    make_option(c("--exclude-celltypes"), type = "character", default = NULL,
+                help = "Comma-separated reference cell types to drop before RCTD (e.g. 'Unannotated' junk clusters)."),
     make_option(c("--seed"), type = "integer", default = 1)
   )
   parser <- OptionParser(option_list = opts,
@@ -140,12 +143,22 @@ parse_args_local <- function() {
 # Build spacexr Reference + SpatialRNA
 # -----------------------------------------------------------------------------
 build_reference <- function(ref_path, celltype_col, min_cells, seed,
-                             restrict_genes = NULL) {
+                             restrict_genes = NULL, reference_min_umi = 100,
+                             exclude_celltypes = NULL) {
   set.seed(seed)
   obj <- .load_h5ad_counts(ref_path)
   ct <- as.character(obj$obs[[celltype_col]])
   if (any(is.na(ct))) {
     keep <- !is.na(ct)
+    obj$X <- obj$X[keep, , drop = FALSE]
+    obj$obs <- obj$obs[keep, , drop = FALSE]
+    ct <- ct[keep]
+    obj$obs_names <- obj$obs_names[keep]
+  }
+  if (!is.null(exclude_celltypes) && length(exclude_celltypes) > 0) {
+    keep <- !(ct %in% exclude_celltypes)
+    message(sprintf("[ref] excluding cell types {%s}: %d -> %d cells",
+                    paste(exclude_celltypes, collapse = ", "), length(ct), sum(keep)))
     obj$X <- obj$X[keep, , drop = FALSE]
     obj$obs <- obj$obs[keep, , drop = FALSE]
     ct <- ct[keep]
@@ -180,7 +193,7 @@ build_reference <- function(ref_path, celltype_col, min_cells, seed,
   cell_types <- factor(ct, levels = sort(unique(ct)))
   names(cell_types) <- as.character(obj$obs_names)
   nUMI <- Matrix::colSums(counts)
-  ref <- spacexr::Reference(counts, cell_types, nUMI)
+  ref <- spacexr::Reference(counts, cell_types, nUMI, min_UMI = reference_min_umi)
   ref
 }
 
@@ -361,11 +374,17 @@ main <- function() {
   rm(panel_post); gc()
   message(sprintf("[main] spatial-panel gene universe: %d genes", length(panel_genes)))
 
+  exclude_ct <- NULL
+  if (!is.null(args$`exclude-celltypes`)) {
+    exclude_ct <- trimws(strsplit(args$`exclude-celltypes`, ",")[[1]])
+  }
   ref <- build_reference(args$`reference-h5ad`,
                           args$`reference-celltype-col`,
                           args$`min-cells-per-celltype-reference`,
                           args$seed,
-                          restrict_genes = panel_genes)
+                          restrict_genes = panel_genes,
+                          reference_min_umi = args$`reference-min-umi`,
+                          exclude_celltypes = exclude_ct)
 
   runs <- list()
   t0 <- Sys.time()

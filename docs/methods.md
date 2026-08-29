@@ -119,25 +119,25 @@ segbench run split \
 
 **SPLIT is scored at cell level, not transcript level.** `SPLIT::purify` returns fractional expected counts, so which individual molecule was removed cannot be recovered. The wrapper therefore writes no transcript parquet; it emits purified/original cell-by-gene matrices plus count-level pruning estimates in `outputs/split_pruning_summary.json`, and sets `qc.transcript_level = false`. Score it with `workflow/scripts/get_cell_level_metric.py`, **not** the transcript-level `get_metric.py`.
 
-### tracer — NPMI-guided refinement
+### tracer — cPMI-guided refinement
 
 | | |
 |---|---|
 | **Needs** | the `tracer` python package |
-| **Input** | `--transcripts`, `--npmi` panel |
+| **Input** | `--transcripts`, `--pmi` panel |
 | **Config** | `configs/methods/tracer.yaml` |
 | **Entity** | cell |
 
 ```bash
 segbench run tracer \
   --transcripts data/TSU-20/filtered_df_standardized.parquet \
-  --npmi results/reference_npmi/lung_cancer_npmi.csv.gz \
+  --pmi results/reference_pmi/lung_cancer_pmi.csv.gz \
   --platform xenium --pmi-threshold 0.2 \
   --outdir benchmark_output/tsu20/tracer \
   --sample-name TSU20 --overwrite
 ```
 
-Build the NPMI panel first with TRACER's `build_npmi_from_scrna.py`. Point `TRACER_HOME` at your TRACER checkout if a config references it.
+Build the cPMI panel first with TRACER's `build_pmi_from_scrna.py`. Point `TRACER_HOME` at your TRACER checkout if a config references it.
 
 ---
 
@@ -175,7 +175,7 @@ far fewer counts than a segmented cell). Config: `configs/methods/tracer_seq.yam
 
 ```bash
 segbench run tracer_seq --dataset visium_hd_demo \
-  --npmi results/reference_npmi/panel.csv.gz \
+  --pmi results/reference_pmi/panel.csv.gz \
   --outdir benchmark_output/visium_hd/tracer_seq
 ```
 

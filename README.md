@@ -271,7 +271,7 @@ benchmark_output/            run outputs (gitignored)
 The `workflow/` Snakemake layer is the older pipeline and remains functional;
 `segbench` is the supported entry point for benchmarking. `get_metric.py`
 computes the downstream biological metrics (label transfer, reference
-consistency, marker specificity, NPMI coherence) on top of any method's
+consistency, marker specificity, cPMI coherence) on top of any method's
 standardized parquet.
 
 ---

@@ -8,7 +8,7 @@ load inputs, run the canonical TRACER pipeline, write the standard outputs.
 
 What this script DOES:
     - Load a standardized transcripts parquet (produced by preprocess_xenium.py).
-    - Load an NPMI panel csv(.gz) (produced by build_npmi_from_scrna.py).
+    - Load an NPMI panel csv(.gz) (produced by build_pmi_from_scrna.py).
     - Load + override platform config (tracer.config.load_config).
     - Run ``tracer.pipeline.run_segmented_pipeline``.
     - Compute per-cell purity/conflict via tracer.metrics.
@@ -21,7 +21,7 @@ What this script DOES:
         config_receipt.json
 
 What this script DOES NOT DO:
-    - Compute NPMI (use scripts/build_npmi_from_scrna.py).
+    - Compute NPMI (use scripts/build_pmi_from_scrna.py).
     - Run ovrlpy (use scripts/run_ovrlpy.py).
     - Run RCTD (use scripts/run_rctd.R).
     - Label transfer (use scripts/label_transfer_spatial.py).
@@ -36,7 +36,7 @@ EXAMPLE
 
     python scripts/run_tracer.py \\
       --transcripts datasets/lung_cancer_xenium_10x/filtered_df.parquet \\
-      --npmi results/reference_npmi/lung_cancer_npmi.csv.gz \\
+      --pmi results/reference_pmi/lung_cancer_pmi.csv.gz \\
       --pmi-threshold 0.2 \\
       --platform xenium \\
       --outdir results/tracer/lung_xenium \\
@@ -83,8 +83,9 @@ def build_argparser() -> argparse.ArgumentParser:
     )
     p.add_argument("--transcripts", type=Path, default=None,
                    help="Standardized transcripts parquet from preprocess_xenium.py.")
-    p.add_argument("--npmi", type=Path, default=None,
-                   help="NPMI panel csv(.gz) from build_npmi_from_scrna.py.")
+    p.add_argument("--pmi", "--npmi", dest="pmi", type=Path, default=None,
+                   help="cPMI/NPMI panel csv(.gz) from build_pmi_from_scrna.py. "
+                        "(--npmi is a deprecated alias for --pmi.)")
     p.add_argument("--pmi-threshold", type=float, default=None,
                    help="Override the in-pipeline PMI threshold (default: from "
                         "platform/user config).")
@@ -391,8 +392,8 @@ def write_outputs(
             "transcripts": str(transcripts_path),
             "transcripts_sha1": file_sha1(transcripts_path),
             "transcripts_rows": int(len(df_post)),
-            "npmi": str(panel_path),
-            "npmi_sha1": file_sha1(panel_path),
+            "pmi": str(panel_path),
+            "pmi_sha1": file_sha1(panel_path),
         },
         "host": {
             "hostname": socket.gethostname(),
@@ -426,7 +427,7 @@ def write_outputs(
         f"- Seed: {args.seed}",
         f"- PMI threshold override: {args.pmi_threshold}",
         f"- Transcripts: `{transcripts_path}` ({len(df_post):,} final rows)",
-        f"- NPMI panel: `{panel_path}`",
+        f"- cPMI panel: `{panel_path}`",
         "",
         "## Stage progression",
         "",
@@ -466,7 +467,7 @@ def main(argv: list[str] | None = None, method: str | None = None) -> int:
     method = method or METHOD
     _base.resolve_config(args, method=method, section="tracer")
     if args.dry_run:
-        print(f"[dry-run] tracer: transcripts={args.transcripts} npmi={args.npmi} "
+        print(f"[dry-run] tracer: transcripts={args.transcripts} pmi={args.pmi} "
               f"platform={args.platform} -> {args.outdir}")
         return 0
     if args.outdir is None:
@@ -494,8 +495,8 @@ def main(argv: list[str] | None = None, method: str | None = None) -> int:
 
     with timer.time("load_transcripts"):
         df = load_transcripts(args.transcripts, log)
-    with timer.time("load_npmi"):
-        panel = load_npmi_panel(args.npmi, log)
+    with timer.time("load_pmi"):
+        panel = load_npmi_panel(args.pmi, log)
     with timer.time("run_method"):
         df_post, progression, cfg = run_tracer(
             df, panel,
@@ -515,7 +516,7 @@ def main(argv: list[str] | None = None, method: str | None = None) -> int:
             df_post, scores, adata,
             outdir=args.outdir, sample_name=args.sample_name,
             args=args, cfg=cfg,
-            panel_path=args.npmi, transcripts_path=args.transcripts,
+            panel_path=args.pmi, transcripts_path=args.transcripts,
             progression=progression, timer=timer, log=log,
         )
 
@@ -535,7 +536,7 @@ def main(argv: list[str] | None = None, method: str | None = None) -> int:
         qc={"platform": args.platform,
             "pmi_threshold": args.pmi_threshold,
             "tau": args.tau,
-            "npmi_panel": str(args.npmi)},
+            "pmi_panel": str(args.pmi)},
         outputs=[str(args.outdir / "outputs" / "transcripts_tracer_refined.parquet")],
         notes="NPMI-guided transcript refinement.")
 
