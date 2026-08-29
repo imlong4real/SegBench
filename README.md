@@ -46,6 +46,23 @@ export SEGBENCH_DATA=/scratch/$USER/spatial_data
 
 ### Method environments
 
+Build everything in one pass (run it on a compute node — conda solves are
+memory-hungry and a login-node cgroup will OOM-kill them):
+
+```bash
+sbatch --mem=48G --cpus-per-task=8 --time=06:00:00 \
+  --wrap="scripts/setup_environments.sh /scratch/$USER/segbench_envs"
+```
+
+Then point SegBench at the result and check what is ready:
+
+```bash
+export SEGBENCH_ENV_ROOT=/scratch/$USER/segbench_envs
+export TRACER_VENV=/path/to/TRACER/.venv
+./bin/segbench doctor
+```
+
+
 Methods need genuinely different runtimes (a Julia binary, a Rust binary, R, a
 CUDA Python). `configs/environments.yaml` declares one per method and is the
 only file naming machine-specific paths; everything resolves through `${VAR}`:
@@ -169,6 +186,19 @@ are reported as `n/a` with a reason rather than coerced — see
 `--min-reference-cells` drops sparsely-represented reference cell types from
 RCTD and the marker/Kendall metrics so rare populations cannot dominate a
 median.
+
+### The full deliverable
+
+One command scores every method on both datasets and emits the unified
+summary CSV, the comparison plots and a markdown table:
+
+```bash
+scripts/make_final_report.sh /scratch/$USER/segbench_runs
+```
+
+It writes `final_report/segbench_summary.csv`, `segbench_comparison.png/pdf`,
+`segbench_cost.png/pdf` and `segbench_summary.md`. The `*_note` columns travel
+with the CSV so the non-comparable markers survive export.
 
 ### Aggregating
 
