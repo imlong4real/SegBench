@@ -17,6 +17,7 @@ import argparse
 from pathlib import Path
 
 from .. import config as cfgmod
+from .. import envs
 from .. import registry
 
 
@@ -83,6 +84,10 @@ def resolve_config(args: argparse.Namespace, *, method: str,
         val = getattr(args, attr, None)
         if isinstance(val, str):
             setattr(args, attr, cfgmod.resolve_path(val))
+    # Point --baysor-bin / --proseg-bin / --rscript at the configured
+    # environment unless the caller overrode them explicitly.
+    envs.inject_tool_paths(args, method)
+
     if getattr(args, "outdir", None) is None:
         raise SystemExit(
             "--outdir is required (pass it on the command line or set "

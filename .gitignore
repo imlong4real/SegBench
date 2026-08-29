@@ -113,3 +113,7 @@ configs/local/
 !reproducibility/**/*.def
 !reproducibility/r/metadata/renv/activate.R
 !resources/**/*.yml
+
+# Per-machine environment resolution (copy from environments.local.example.sh)
+configs/environments.local.yaml
+configs/environments.local.sh

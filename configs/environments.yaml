@@ -1,0 +1,40 @@
+# Per-method execution environments.
+#
+# This is the ONLY file that names machine-specific locations. Everything else
+# in the repo is path-free. Override the whole file with SEGBENCH_ENV_CONFIG,
+# or just move the tree and set SEGBENCH_ENV_ROOT.
+#
+# Each method may declare:
+#   python   interpreter to run the wrapper under (segbench re-execs into it)
+#   binary   external executable the wrapper drives
+#   rscript  Rscript for R-backed methods
+#   env      free-form extra environment variables
+#
+# `segbench doctor` resolves and probes every entry here.
+
+env_root: ${SEGBENCH_ENV_ROOT}
+
+methods:
+  baysor:
+    binary: ${SEGBENCH_ENV_ROOT}/baysor/bin/baysor/bin/baysor
+
+  proseg:
+    binary: ${SEGBENCH_ENV_ROOT}/cargo/bin/proseg
+
+  segger:
+    python: ${SEGBENCH_ENV_ROOT}/venvs/segger/bin/python
+
+  bin2cell:
+    python: ${SEGBENCH_ENV_ROOT}/venvs/bin2cell/bin/python
+
+  split:
+    rscript: ${SEGBENCH_ENV_ROOT}/envs/r/bin/Rscript
+
+  celladmix:
+    rscript: ${SEGBENCH_ENV_ROOT}/envs/r/bin/Rscript
+
+  tracer:
+    python: ${TRACER_VENV}/bin/python
+
+  tracer_seq:
+    python: ${TRACER_VENV}/bin/python

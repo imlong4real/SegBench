@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -21,6 +22,7 @@ from pathlib import Path
 
 from . import REPO_ROOT, __version__
 from . import config as cfgmod
+from . import envs
 from . import registry
 from .registry import IMAGING, SEQUENCING
 
@@ -29,32 +31,28 @@ from .registry import IMAGING, SEQUENCING
 # Dependency probing
 # ---------------------------------------------------------------------------
 def _probe(spec: registry.MethodSpec) -> tuple[bool, list[str]]:
-    """Return (runnable_here, missing) for one method.
+    """Is this method runnable here? Delegates to the environment config."""
+    return envs.probe(spec.name, spec)
 
-    Probing is deliberately shallow — it imports nothing heavy. It answers
-    "would this run crash immediately?", not "is every version correct?".
+
+def _reexec_if_needed(spec: registry.MethodSpec, argv: list[str]) -> int | None:
+    """Re-run this command under the method's own interpreter, if it has one.
+
+    Methods like bin2cell and segger execute in-process inside environments the
+    driver itself does not live in. Rather than make the user activate an env,
+    we hand the same command to that interpreter and return its exit code.
+    Returns None when no re-exec is needed.
     """
-    missing: list[str] = []
-    mod_checks = {
-        "baysor": [("bin", "baysor")],
-        "proseg": [("bin", "proseg")],
-        "segger": [("py", "torch"), ("py", "segger")],
-        "split": [("bin", "Rscript")],
-        "celladmix": [("bin", "Rscript")],
-        "tracer": [("py", "tracer")],
-        "tracer_seq": [("py", "tracer")],
-        "bin2cell": [("py", "bin2cell")],
-    }
-    for kind, name in mod_checks.get(spec.name, []):
-        if kind == "bin":
-            if shutil.which(name) is None:
-                missing.append(f"binary:{name}")
-        else:
-            try:
-                __import__(name)
-            except Exception:
-                missing.append(f"python:{name}")
-    return (not missing), missing
+    py = envs.interpreter(spec.name)
+    if py is None:
+        return None
+    env = dict(os.environ)
+    src = str(REPO_ROOT / "src")
+    env["PYTHONPATH"] = src + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
+    env["SEGBENCH_NO_REEXEC"] = "1"          # the child must not bounce again
+    cmd = [py, "-m", "segbench", "run", spec.name] + argv
+    print(f"[segbench] running {spec.name} under {py}")
+    return subprocess.call(cmd, env=env, cwd=str(REPO_ROOT))
 
 
 # ---------------------------------------------------------------------------
@@ -97,6 +95,11 @@ def cmd_doctor(args: argparse.Namespace) -> int:
                         "external_deps": list(spec.external_deps)}
         status = "READY" if ok else "NOT READY"
         print(f"{name:<12} {status}")
+        entry = envs.for_method(name)
+        for key in ("python", "binary", "rscript"):
+            if key in entry:
+                got = envs.resolve(name, key)
+                print(f"             {key:<8} {got or '(unresolved) ' + str(entry[key])}")
         if not ok:
             exit_code = 1
             for m in missing:
@@ -111,6 +114,10 @@ def cmd_doctor(args: argparse.Namespace) -> int:
 
 def cmd_run(args: argparse.Namespace, rest: list[str]) -> int:
     spec = registry.get(args.method)
+    if not os.environ.get("SEGBENCH_NO_REEXEC"):
+        rc = _reexec_if_needed(spec, rest)
+        if rc is not None:
+            return rc
     mod = spec.load()
     if not hasattr(mod, "main"):
         raise SystemExit(f"Wrapper segbench.methods.{spec.module} defines no main()")
@@ -171,7 +178,9 @@ def cmd_suite(args: argparse.Namespace) -> int:
 
         print(f"\n=== {name} ===")
         try:
-            rc = int(_invoke(spec.load(), argv, spec) or 0)
+            rc = _reexec_if_needed(spec, argv) if not os.environ.get("SEGBENCH_NO_REEXEC") else None
+            if rc is None:
+                rc = int(_invoke(spec.load(), argv, spec) or 0)
             status = "ok" if rc == 0 else f"failed(rc={rc})"
         except SystemExit as exc:
             rc = int(exc.code or 0) if isinstance(exc.code, int) else 1
