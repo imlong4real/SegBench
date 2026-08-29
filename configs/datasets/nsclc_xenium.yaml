@@ -1,0 +1,18 @@
+# NSCLC Xenium (TSU-20) — imaging / molecule-resolved.
+dataset:
+  name: nsclc_xenium
+  platform: xenium
+  modality: imaging
+sample_name: TSU20
+
+inputs:
+  transcripts:  ${SEGBENCH_DATA}/dataset/lung_cancer_xenium_10x/TSU-20/filtered_df_standardized.parquet
+  xenium_dir:   ${SEGBENCH_DATA}/dataset/lung_cancer_xenium_10x/TSU-20
+  reference_h5ad: ${SEGBENCH_DATA}/dataset/lung_cancer_scrna_10x/lung_cancer_50k.h5ad
+  reference_celltype_col: Cell_Cluster_level1
+  # Panel-matched cPMI derived from the reference restricted to the 302-gene
+  # Xenium panel (299 genes survive the detection floor).
+  pmi: /scratch4/adeshpa6/segbench_runs/nsclc_xenium/reference/nsclc_pmi.csv.gz
+
+tracer:
+  platform: xenium

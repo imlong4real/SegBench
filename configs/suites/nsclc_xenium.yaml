@@ -1,0 +1,18 @@
+# NSCLC Xenium benchmark — every imaging method on TSU-20.
+#   segbench suite nsclc_xenium
+name: nsclc_xenium
+dataset: nsclc_xenium
+outdir: /scratch4/adeshpa6/segbench_runs/nsclc_xenium/methods
+methods:
+  - name: proseg
+    args: ["--threads", "8"]
+  - name: baysor
+    args: ["--threads", "8", "--min-molecules-per-cell", "30"]
+  - name: segger
+    args: ["--threads", "8", "--max-epochs", "3", "--accelerator", "cuda"]
+  - name: split
+    args: ["--threads", "8"]
+  - name: celladmix
+    args: ["--threads", "8"]
+  - name: tracer
+    args: ["--platform", "xenium"]

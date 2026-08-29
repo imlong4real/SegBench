@@ -1,0 +1,15 @@
+# Normal-kidney Visium HD benchmark.
+#   segbench suite kidney_visiumhd
+#
+# tracer  = segmented mode, driven by the 10x cell_segmentations.geojson
+# tracer_seq = no-seg mode on the raw 2um bins
+name: kidney_visiumhd
+dataset: kidney_visiumhd
+outdir: /scratch4/adeshpa6/segbench_runs/kidney_visiumhd/methods
+methods:
+  - name: bin2cell
+    args: ["--threads", "8", "--mpp", "0.5", "--prob-thresh", "0.01"]
+  - name: tracer
+    args: ["--platform", "visium_hd"]
+  - name: tracer_seq
+    args: ["--platform", "visium_hd"]
