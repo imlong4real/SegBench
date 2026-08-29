@@ -59,6 +59,10 @@ def build_argparser() -> argparse.ArgumentParser:
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     _base.add_common_args(p, method=METHOD)
     _base.add_transcript_input_args(p)
+    p.add_argument("--rscript", default=None,
+                   help="Rscript to use. Defaults to the one configured in "
+                        "configs/environments.yaml; falls back to `conda run "
+                        "-n <--r-env>` only when nothing is configured.")
     p.add_argument("--r-env", default="tracer_benchmark_r",
                    help="conda env with the cellAdmix R package.")
     p.add_argument("--xenium-dir", default="dataset/lung_cancer_xenium_10x/TSU-20")
@@ -153,9 +157,12 @@ def main(argv: list[str] | None = None) -> int:
             raise SystemExit(f"cellAdmix R script not found: {R_SCRIPT}")
         log.info("RUN mode — invoking cellAdmix via conda env '%s'", args.r_env)
         with timer.time("run_method"):
-            cmd = [
-                "conda", "run", "-n", args.r_env, "Rscript", str(R_SCRIPT),
-                "--xenium-dir", args.xenium_dir,
+            launcher = ([args.rscript] if args.rscript
+                        else ["conda", "run", "-n", args.r_env, "Rscript"])
+            log.info("invoking cellAdmix via %s", " ".join(launcher))
+            cmd = launcher + [
+                str(R_SCRIPT),
+                "--xenium-dir", str(args.xenium_dir),
                 "--clusters", args.clusters,
                 "--outdir", str(raw_dir),
                 "--common-inputs", args.common_inputs,

@@ -46,6 +46,18 @@ def _decode(x: Any) -> Any:
     return x
 
 
+
+def h5ad_index_key(group: "h5py.Group") -> str:
+    """Name of the dataset holding a dataframe group's index.
+
+    AnnData records this in the group's ``_index`` *attribute*; it is only
+    literally called "_index" when the frame had an unnamed index. Files
+    written from Seurat commonly use "gene" or "cell", so reading the
+    attribute is what makes this work across references.
+    """
+    return str(group.attrs.get("_index", "_index"))
+
+
 def read_h5ad_column(group: h5py.Group, name: str) -> np.ndarray:
     obj = group[name]
     if isinstance(obj, h5py.Dataset):
@@ -88,7 +100,7 @@ def h5ad_csr(f: h5py.File, key: str = "X") -> sparse.csr_matrix:
 def read_h5ad_genes(f: h5py.File) -> list[str]:
     if "feature_name" in f["var"]:
         return [str(x) for x in read_h5ad_column(f["var"], "feature_name")]
-    return [str(x) for x in read_h5ad_column(f["var"], "_index")]
+    return [str(x) for x in read_h5ad_column(f["var"], h5ad_index_key(f["var"]))]
 
 
 def read_10x_features(path: Path) -> pd.DataFrame:
@@ -168,7 +180,7 @@ def main() -> int:
     with h5py.File(args.scrna_h5ad, "r") as f:
         obs_cols = list(f["obs"].keys())
         celltype_col = choose_celltype_column(obs_cols, args.celltype_column)
-        ref_cells = [str(x) for x in read_h5ad_column(f["obs"], "_index")]
+        ref_cells = [str(x) for x in read_h5ad_column(f["obs"], h5ad_index_key(f["obs"]))]
         ref_genes = read_h5ad_genes(f)
         ref_labels = read_h5ad_column(f["obs"], celltype_col)
 

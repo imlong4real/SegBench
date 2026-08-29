@@ -117,6 +117,12 @@ def build_argparser() -> argparse.ArgumentParser:
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     _base.add_common_args(p, method=METHOD)
     _base.add_transcript_input_args(p)
+    p.add_argument("--xenium-dir", default=None,
+                   help="Xenium bundle dir (was hardcoded to TSU-20).")
+    p.add_argument("--rscript", default=None,
+                   help="Rscript to use. Defaults to the one configured in "
+                        "configs/environments.yaml; falls back to `conda run "
+                        "-n <--r-env>` only when nothing is configured.")
     p.add_argument("--r-env", default="tracer_benchmark_r",
                    help="conda env with SPLIT + spacexr + Seurat.")
     p.add_argument("--common-inputs", default="results/tsu20_tools/common_inputs")
@@ -466,11 +472,13 @@ def main(argv: list[str] | None = None) -> int:
     else:
         if not R_SCRIPT.exists():
             raise SystemExit(f"SPLIT R script not found: {R_SCRIPT}")
-        log.info("RUN mode — invoking SPLIT/RCTD via conda env '%s'", args.r_env)
+        launcher = ([args.rscript] if args.rscript
+                    else ["conda", "run", "-n", args.r_env, "Rscript"])
+        log.info("RUN mode — invoking SPLIT/RCTD via %s", " ".join(launcher))
         with timer.time("run_method"):
-            cmd = [
-                "conda", "run", "-n", args.r_env, "Rscript", str(R_SCRIPT),
-                "--xenium-dir", "dataset/lung_cancer_xenium_10x/TSU-20",
+            cmd = launcher + [
+                str(R_SCRIPT),
+                "--xenium-dir", str(args.xenium_dir or ""),
                 "--scrna-h5ad", str(args.reference_h5ad or ""),
                 "--celltype-column", args.reference_celltype_col,
                 "--outdir", str(raw_dir),
