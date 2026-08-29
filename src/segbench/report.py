@@ -184,6 +184,20 @@ def write_markdown_summary(df: pd.DataFrame, out_path: Path, *,
     if excluded_celltypes:
         lines += [f"Excluded cell types: {', '.join(excluded_celltypes)}", ""]
 
+    # A table mixing entity kinds needs saying out loud: n_entities for a
+    # "bin" row and a "cell" row are different units, and nothing in the
+    # column name stops a reader comparing them.
+    if "entity_kind" in df.columns:
+        kinds = sorted({str(k) for k in df["entity_kind"].dropna().unique()})
+        if len(kinds) > 1:
+            lines += [
+                f"> **Entity kinds differ across rows ({', '.join(kinds)}).** "
+                "`n_entities` and the mean-transcripts columns are in different "
+                "units per kind and must not be compared across them. Runtime, "
+                "memory and the reference-based metrics remain comparable.",
+                "",
+            ]
+
     notes = [c for c in df.columns if c.endswith("_note")]
     if notes:
         lines += ["## Non-comparable quantities", "",
