@@ -67,6 +67,26 @@ Two defects surfaced and were fixed:
 
 ---
 
+### Segger ran on CPU, not GPU
+
+`qos_gpu` is available to this user only through the `aszalay1_gpu` account,
+whose lifetime allocation is **60 CPU-minutes / 5 GPU-minutes** (`GrpTRESMins
+billing=60,cpu=60,gres/gpu=5`, RawUsage 0 — an unused placeholder rather than
+a working budget). Five GPU-minutes cannot train Segger, and no other account
+this user belongs to carries a GPU QOS: `a100`, `ica100` and `l40s` all reject
+the `normal` QOS that `adeshpa6` and `aszalay1` hold.
+
+Segger was therefore run with `--accelerator cpu` on `adeshpa6`, which has a
+real CPU budget, rather than being skipped.
+
+**Consequence for the comparison table.** Segger's `runtime_method_s` and
+`peak_rss_gb` are CPU-bound figures and are **not comparable** to the other
+methods' — and emphatically not to a GPU-trained Segger. They are marked as
+such in the emitted table rather than presented as equivalent. Every other
+Segger quantity (cell count, transcript assignment, RCTD entropy / max weight,
+Kendall, marker LFC) is unaffected by the accelerator choice and stays
+comparable.
+
 ## 3. Environments installed
 
 Built under `$SEGBENCH_ENV_ROOT` (`/scratch4/adeshpa6/segbench_envs`) and wired

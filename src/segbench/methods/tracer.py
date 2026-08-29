@@ -306,7 +306,7 @@ def build_outputs(
     import anndata as ad
     import scipy.sparse as sp
     from tracer.metrics import (
-        build_cell_gene_matrix, build_npmi_matrix,
+        build_cell_gene_matrix, build_pmi_matrix,
         compute_cell_purity_relu, compute_cell_conflict_relu,
     )
 
@@ -321,7 +321,7 @@ def build_outputs(
         work, min_transcripts=min_tx, genes_npm=npmi_panel,
         cell_col="cell_id", exclude_ids=set(UNASSIGNED_TOKENS),
     )
-    npmi_mat, _gix = build_npmi_matrix(npmi_panel)
+    npmi_mat, _gix = build_pmi_matrix(npmi_panel)
     _, _, _, pur_df = compute_cell_purity_relu(
         M=M, col_idx=col_idx, npmi_mat=npmi_mat, tau=tau, cell_ids=cell_ids,
     )
