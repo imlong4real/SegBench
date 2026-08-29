@@ -24,4 +24,9 @@ inputs:
   pmi: /scratch4/adeshpa6/segbench_runs/kidney_visiumhd/reference/kidney_pmi.csv.gz
 
 tracer:
-  platform: visium_hd
+  # VisiumHD segmented mode runs the SAME seg pipeline as imaging data, on the
+  # table prepare_visiumhd_seg_input.py builds (which carries cell_id +
+  # overlaps_nucleus), so the platform preset is `xenium`. There is no
+  # `visium_hd` preset; `noseg` is the no-seg pipeline's own preset and is
+  # applied by tracer_seq internally.
+  platform: xenium
