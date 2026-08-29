@@ -154,22 +154,29 @@ def _tracer_whole_partial(row: EvalRow, transcripts: Path) -> None:
     except Exception as exc:
         row.notes["n_whole_cells"] = f"unreadable transcripts: {exc}"
         return
-    col = next((c for c in ("stitched", "cell_id") if c in df.columns), None)
+    col = next((c for c in ("tracer_id", "stitched", "cell_id")
+                if c in df.columns), None)
     if col is None:
         return
     cid = df[col].astype(str)
     assigned = cid[cid != "UNASSIGNED"]
     if not len(assigned):
         return
-    try:
-        import sys
-        sys.path.insert(0, str(Path(REPO_ROOT).parent / "TRACER" / "src"))
-        from tracer.plot import is_whole_cell_id
-        whole_mask = is_whole_cell_id(assigned)
-    except Exception:
-        # TRACER's own predicate is authoritative; without it, fall back to the
-        # documented id convention (partial fragments carry a suffix).
-        whole_mask = ~assigned.str.contains(r"[_:\-](frag|part|p)\d+$", regex=True)
+    # TRACER labels every transcript's entity type directly; that is
+    # authoritative and avoids guessing from the id string.
+    if "_etype" in df.columns:
+        etype = df.loc[assigned.index, "_etype"].astype(str)
+        whole_mask = etype.eq("cell")
+    else:
+        try:
+            import sys
+            sys.path.insert(0, str(Path(REPO_ROOT).parent / "TRACER" / "src"))
+            from tracer.plot import is_whole_cell_id
+            whole_mask = is_whole_cell_id(assigned)
+        except Exception:
+            # Last resort: the documented id convention for fragments.
+            whole_mask = ~assigned.str.contains(r"[_:\-](frag|part|p)\d+$",
+                                                regex=True)
 
     whole_ids = assigned[whole_mask]
     part_ids = assigned[~whole_mask]
@@ -271,3 +278,144 @@ def build_table(rows: list[EvalRow]) -> pd.DataFrame:
            [c for c in df.columns if c not in lead and not c.endswith("_note")] + \
            [c for c in df.columns if c.endswith("_note")]
     return df[cols]
+
+
+# ---------------------------------------------------------------------------
+# Reference-consistency + marker specificity
+# ---------------------------------------------------------------------------
+# Both use RCTD's dominant_celltype as the spatial label. Using one label
+# source for every method is what makes these columns comparable: an
+# independently-tuned label transfer per method would confound the metric with
+# the transfer, and RCTD is already being run for entropy/max-weight anyway.
+
+def _pseudobulk(X, labels: pd.Series, genes: list[str],
+                types: list[str]) -> pd.DataFrame:
+    """Mean log1p-CPM profile per cell type (cells x genes -> types x genes)."""
+    import numpy as _np
+    import scipy.sparse as sp
+    out = {}
+    for t in types:
+        idx = _np.flatnonzero((labels == t).to_numpy())
+        if idx.size < 5:            # too few cells for a stable profile
+            continue
+        sub = X[idx]
+        tot = sub.sum(axis=1)
+        tot = _np.asarray(tot).ravel() if sp.issparse(sub) else _np.asarray(tot).ravel()
+        tot[tot == 0] = 1.0
+        cpm = (sub.multiply(1e4 / tot[:, None]) if sp.issparse(sub)
+               else sub * (1e4 / tot[:, None]))
+        m = _np.asarray(cpm.mean(axis=0)).ravel()
+        out[t] = _np.log1p(m)
+    return pd.DataFrame(out, index=genes).T
+
+
+def reference_consistency(
+    row: EvalRow, *, cell_h5ad: Path, rctd_per_cell: Path,
+    reference_h5ad: Path, celltype_col: str, kept_types: list[str],
+) -> None:
+    """Kendall tau (and Pearson r) between spatial and reference pseudo-bulk.
+
+    Computed per cell type over shared genes, then summarised by the median
+    across types so one abundant type cannot dominate.
+    """
+    import anndata as ad
+    from scipy.stats import kendalltau, pearsonr
+    try:
+        q = ad.read_h5ad(cell_h5ad)
+        rc = pd.read_csv(rctd_per_cell, sep="\t")
+        r = ad.read_h5ad(reference_h5ad)
+    except Exception as exc:
+        row.na("kendall_tau_median", f"inputs unreadable: {exc}")
+        return
+
+    lab = rc.set_index(rc.columns[0])["dominant_celltype"].astype(str)
+    lab = lab.reindex(q.obs_names.astype(str))
+    shared = [g for g in q.var_names.astype(str) if g in set(r.var_names.astype(str))]
+    if len(shared) < 20:
+        row.na("kendall_tau_median", f"only {len(shared)} shared genes")
+        return
+
+    types = [t for t in kept_types if (lab == t).sum() >= 5]
+    if not types:
+        row.na("kendall_tau_median", "no cell type reached 5 spatial cells")
+        return
+
+    qX = q[:, shared].X
+    rX = r[:, shared].layers["counts"] if "counts" in r.layers else r[:, shared].X
+    qb = _pseudobulk(qX, lab.reset_index(drop=True), shared, types)
+    rb = _pseudobulk(rX, r.obs[celltype_col].astype(str).reset_index(drop=True),
+                     shared, types)
+    common = [t for t in qb.index if t in rb.index]
+    if not common:
+        row.na("kendall_tau_median", "no cell type present in both")
+        return
+
+    kt, pr = [], []
+    for t in common:
+        a, b = qb.loc[t].to_numpy(), rb.loc[t].to_numpy()
+        if np.std(a) == 0 or np.std(b) == 0:
+            continue
+        kt.append(float(kendalltau(a, b)[0]))
+        pr.append(float(pearsonr(a, b)[0]))
+    if kt:
+        row.set("kendall_tau_median", float(np.nanmedian(kt)))
+        row.set("pearson_r_median", float(np.nanmedian(pr)))
+        row.set("n_celltypes_scored", len(kt))
+    else:
+        row.na("kendall_tau_median", "all profiles constant")
+
+
+def marker_specificity(
+    row: EvalRow, *, cell_h5ad: Path, rctd_per_cell: Path,
+    reference_h5ad: Path, celltype_col: str, kept_types: list[str],
+    n_top: int = 30,
+) -> None:
+    """Median log2FC of each cell type's reference markers in the spatial data.
+
+    Markers are chosen once from the reference (top-N by reference log2FC per
+    type) and reused for every method, so the gene set is not re-tuned per
+    method.
+    """
+    import anndata as ad
+    try:
+        q = ad.read_h5ad(cell_h5ad)
+        rc = pd.read_csv(rctd_per_cell, sep="\t")
+        r = ad.read_h5ad(reference_h5ad)
+    except Exception as exc:
+        row.na("marker_logfc_median", f"inputs unreadable: {exc}")
+        return
+
+    lab = pd.Series(rc.set_index(rc.columns[0])["dominant_celltype"].astype(str)) \
+            .reindex(q.obs_names.astype(str)).reset_index(drop=True)
+    shared = [g for g in q.var_names.astype(str) if g in set(r.var_names.astype(str))]
+    types = [t for t in kept_types if (lab == t).sum() >= 5]
+    if len(shared) < 20 or not types:
+        row.na("marker_logfc_median", "insufficient shared genes or cell types")
+        return
+
+    rlab = r.obs[celltype_col].astype(str).reset_index(drop=True)
+    rX = r[:, shared].layers["counts"] if "counts" in r.layers else r[:, shared].X
+    rb = _pseudobulk(rX, rlab, shared, types)
+    qb = _pseudobulk(q[:, shared].X, lab, shared, types)
+    common = [t for t in qb.index if t in rb.index]
+    if not common:
+        row.na("marker_logfc_median", "no cell type present in both")
+        return
+
+    lfcs = []
+    for t in common:
+        rest = [u for u in common if u != t]
+        if not rest:
+            continue
+        ref_lfc = (rb.loc[t] - rb.loc[rest].mean(axis=0)).sort_values(ascending=False)
+        markers = [g for g in ref_lfc.index[:n_top]]
+        if not markers:
+            continue
+        # Same markers, evaluated in the spatial data.
+        spat = qb.loc[t, markers] - qb.loc[rest, markers].mean(axis=0)
+        lfcs.append(float(np.nanmedian(spat.to_numpy())))
+    if lfcs:
+        row.set("marker_logfc_median", float(np.nanmedian(lfcs)))
+        row.set("n_marker_celltypes", len(lfcs))
+    else:
+        row.na("marker_logfc_median", "no markers resolvable")

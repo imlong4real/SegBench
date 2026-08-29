@@ -297,6 +297,23 @@ UNASSIGNED_TOKENS = frozenset({
 })
 
 
+#: Candidate names for TRACER's final per-transcript label, newest first.
+#: run_segmented_pipeline canonicalizes to ``tracer_id``; ``stitched`` is the
+#: legacy name kept so older outputs still score.
+LABEL_CANDIDATES = ("tracer_id", "stitched", "cell_id")
+
+
+def resolve_label_col(df, requested: str | None = None) -> str:
+    """Pick TRACER's final label column, tolerating the rename."""
+    if requested and requested in df.columns:
+        return requested
+    for c in LABEL_CANDIDATES:
+        if c in df.columns:
+            return c
+    raise SystemExit(
+        f"TRACER output has none of {LABEL_CANDIDATES}; columns: {list(df.columns)}")
+
+
 def build_outputs(
     df_post: pd.DataFrame, *,
     npmi_panel: pd.DataFrame, log: logging.Logger,
@@ -508,7 +525,7 @@ def main(argv: list[str] | None = None, method: str | None = None) -> int:
     with timer.time("build_outputs"):
         scores, adata = build_outputs(
             df_post, npmi_panel=panel, log=log,
-            label_col="stitched",
+            label_col=resolve_label_col(df_post),
             min_tx=args.min_tx_per_cell_for_scores, tau=args.tau,
         )
     with timer.time("write_outputs"):
@@ -526,11 +543,11 @@ def main(argv: list[str] | None = None, method: str | None = None) -> int:
         modality="sequencing" if method.endswith("_seq") else "imaging",
         sample_name=args.sample_name, timer=timer, dataset=args.dataset,
         transcripts=stx.transcript_accounting(
-            df_post, cell_col="stitched" if "stitched" in df_post.columns else "cell_id",
+            df_post, cell_col=resolve_label_col(df_post),
             n_input=int(len(df))),
         entities=stx.entity_accounting(
             df_post,
-            cell_col="stitched" if "stitched" in df_post.columns else "cell_id",
+            cell_col=resolve_label_col(df_post),
             entity_kind="bin" if method.endswith("_seq") else "cell",
             n_entities=n_cells),
         qc={"platform": args.platform,
