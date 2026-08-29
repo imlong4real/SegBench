@@ -271,7 +271,9 @@ def cmd_evaluate(args: argparse.Namespace) -> int:
         # RCTD is the single label source: its dominant_celltype feeds both
         # the Kendall and the marker comparison, so no method gets its own
         # label transfer and the columns stay comparable.
-        cell_h5ad = next(iter(sorted(d.glob("outputs/*cell_by_gene.h5ad"))), None)
+        # TRACER names its file cell_by_gene_tracer.h5ad, so match the stem
+        # anywhere rather than requiring it as a suffix.
+        cell_h5ad = next(iter(sorted(d.glob("outputs/*cell_by_gene*.h5ad"))), None)
         rscript = envs.resolve("split", "rscript") or envs.resolve("celladmix", "rscript")
         if args.skip_rctd:
             row.na("rctd_entropy_median", "skipped (--skip-rctd)")

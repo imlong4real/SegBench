@@ -290,6 +290,21 @@ def _pseudobulk(X, labels: pd.Series, genes: list[str],
     return pd.DataFrame(out, index=genes).T
 
 
+
+def _rctd_labels(rctd_per_cell: Path, obs_names) -> pd.Series:
+    """RCTD dominant_celltype aligned to an AnnData's obs_names.
+
+    The id column is forced to string on BOTH sides. proseg names cells with
+    integers, which pandas reads as float64; reindexing a float64 index with
+    string keys matches nothing and yields an all-NaN label vector, so every
+    downstream metric silently comes back empty rather than failing loudly.
+    """
+    rc = pd.read_csv(rctd_per_cell, sep="\t")
+    lab = rc.set_index(rc.columns[0])["dominant_celltype"].astype(str)
+    lab.index = lab.index.astype(str)
+    return lab.reindex(pd.Index(obs_names).astype(str))
+
+
 def reference_consistency(
     row: EvalRow, *, cell_h5ad: Path, rctd_per_cell: Path,
     reference_h5ad: Path, celltype_col: str, kept_types: list[str],
@@ -303,14 +318,11 @@ def reference_consistency(
     from scipy.stats import kendalltau, pearsonr
     try:
         q = ad.read_h5ad(cell_h5ad)
-        rc = pd.read_csv(rctd_per_cell, sep="\t")
         r = ad.read_h5ad(reference_h5ad)
+        lab = _rctd_labels(rctd_per_cell, q.obs_names)
     except Exception as exc:
         row.na("kendall_tau_median", f"inputs unreadable: {exc}")
         return
-
-    lab = rc.set_index(rc.columns[0])["dominant_celltype"].astype(str)
-    lab = lab.reindex(q.obs_names.astype(str))
     shared = [g for g in q.var_names.astype(str) if g in set(r.var_names.astype(str))]
     if len(shared) < 20:
         row.na("kendall_tau_median", f"only {len(shared)} shared genes")
@@ -360,14 +372,11 @@ def marker_specificity(
     import anndata as ad
     try:
         q = ad.read_h5ad(cell_h5ad)
-        rc = pd.read_csv(rctd_per_cell, sep="\t")
         r = ad.read_h5ad(reference_h5ad)
+        lab = _rctd_labels(rctd_per_cell, q.obs_names).reset_index(drop=True)
     except Exception as exc:
         row.na("marker_logfc_median", f"inputs unreadable: {exc}")
         return
-
-    lab = pd.Series(rc.set_index(rc.columns[0])["dominant_celltype"].astype(str)) \
-            .reindex(q.obs_names.astype(str)).reset_index(drop=True)
     shared = [g for g in q.var_names.astype(str) if g in set(r.var_names.astype(str))]
     types = [t for t in kept_types if (lab == t).sum() >= 5]
     if len(shared) < 20 or not types:
