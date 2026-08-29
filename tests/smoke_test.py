@@ -212,6 +212,58 @@ def test_missing_tool_message(tmp: Path) -> None:
           out.strip()[-300:])
 
 
+def test_no_undefined_names() -> None:
+    """Every global a wrapper calls must actually exist in its module.
+
+    Python resolves names at call time, so a wrapper can import, compile and
+    pass --dry-run while still calling a function that was never defined —
+    which is exactly how a broken TRACER wrapper reached SLURM and failed only
+    after the method had already finished running.
+
+    Bindings are collected from anywhere in the module (including imports and
+    defs inside function bodies, which these wrappers use heavily for optional
+    dependencies), so only genuinely unbound names are reported.
+    """
+    print("\n[8] no undefined global names in wrappers")
+    import ast
+    import builtins
+    from segbench import registry
+
+    def bound_names(tree: ast.AST) -> set[str]:
+        names: set[str] = set()
+        for n in ast.walk(tree):
+            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                names.add(n.name)
+                a = n.args
+                names |= {x.arg for x in a.args + a.kwonlyargs + a.posonlyargs}
+                for extra in (a.vararg, a.kwarg):
+                    if extra:
+                        names.add(extra.arg)
+            elif isinstance(n, ast.ClassDef):
+                names.add(n.name)
+            elif isinstance(n, (ast.Import, ast.ImportFrom)):
+                for al in n.names:
+                    names.add((al.asname or al.name).split(".")[0])
+            elif isinstance(n, ast.Name) and isinstance(n.ctx, ast.Store):
+                names.add(n.id)
+            elif isinstance(n, ast.ExceptHandler) and n.name:
+                names.add(n.name)
+            elif isinstance(n, ast.arg):
+                names.add(n.arg)
+        return names
+
+    for name, spec in registry.METHODS.items():
+        mod = spec.load()
+        tree = ast.parse(Path(mod.__file__).read_text())
+        called = {n.func.id for n in ast.walk(tree)
+                  if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)}
+        known = set(dir(mod)) | set(dir(builtins)) | bound_names(tree)
+        missing = sorted(called - known)
+        check(f"{name}: all called names resolve", not missing,
+              f"undefined: {missing}")
+
+
+
 def main() -> int:
     tmp = Path(tempfile.mkdtemp(prefix="segbench_smoke_"))
     try:
@@ -226,6 +278,7 @@ def main() -> int:
         test_stats_contract(tmp)
         test_dry_runs(tmp)
         test_missing_tool_message(tmp)
+        test_no_undefined_names()
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 

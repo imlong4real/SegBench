@@ -104,6 +104,12 @@ def build_argparser() -> argparse.ArgumentParser:
                    help="Min transcripts/cell for cell-level purity/conflict scoring.")
     p.add_argument("--tau", type=float, default=0.05,
                    help="NPMI threshold for purity/conflict relu (default 0.05).")
+    p.add_argument("--visiumhd-matrix", type=Path, default=None,
+                   help="[tracer_seq] spaceranger bin matrix dir (no-seg mode).")
+    p.add_argument("--spatial-dir", type=Path, default=None,
+                   help="[tracer_seq] the matching spatial/ dir.")
+    p.add_argument("--bin-size-um", type=float, default=2.0,
+                   help="[tracer_seq] bin pitch in microns.")
     p.add_argument("--config", default=None,
                    help="User config YAML (highest-precedence layer).")
     p.add_argument("--dataset", default=None,
@@ -483,6 +489,9 @@ def main(argv: list[str] | None = None, method: str | None = None) -> int:
     args = build_argparser().parse_args(argv)
     method = method or METHOD
     _base.resolve_config(args, method=method, section="tracer")
+    if method.endswith("_seq") and not args.dry_run:
+        return _run_noseg(args, method=method)
+
     if args.dry_run:
         print(f"[dry-run] tracer: transcripts={args.transcripts} pmi={args.pmi} "
               f"platform={args.platform} -> {args.outdir}")
@@ -554,6 +563,149 @@ def main(argv: list[str] | None = None, method: str | None = None) -> int:
 
     log.info("DONE. Total wall: %.1fs",
              sum(s.seconds for s in timer.stages))
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# TRACER-specific accounting
+#
+# TRACER marks every transcript with `_etype`: "cell" (a whole cell),
+# "partial" (a fragment it could not stitch) or "unknown" (unassigned), and
+# uses cell_id="-1" for unassigned. Counting on cell_id would therefore report
+# 100% of transcripts assigned and treat "-1" as a real entity, so `_etype` is
+# the authoritative signal.
+# ---------------------------------------------------------------------------
+_ASSIGNED_ETYPES = ("cell", "partial")
+
+
+def _tracer_transcript_accounting(df, *, n_input=None):
+    if "_etype" not in df.columns:
+        return stx.transcript_accounting(df, cell_col=resolve_label_col(df),
+                                         n_input=n_input)
+    et = df["_etype"].astype(str)
+    n_total = int(len(et))
+    n_assigned = int(et.isin(_ASSIGNED_ETYPES).sum())
+    return {
+        "n_total": n_total,
+        "n_assigned": n_assigned,
+        "n_unassigned": n_total - n_assigned,
+        "frac_assigned": (n_assigned / n_total) if n_total else None,
+        "n_input": n_input,
+        "delta_vs_input": (n_total - n_input) if n_input is not None else None,
+    }
+
+
+def _tracer_entity_accounting(df, *, entity_kind="cell"):
+    """Whole and partial entities counted separately, never pooled.
+
+    Pooling them would make mean-transcripts-per-profile incomparable with
+    methods that emit only whole cells.
+    """
+    out = {"entity_kind": entity_kind}
+    if "_etype" not in df.columns or "cell_id" not in df.columns:
+        return stx.entity_accounting(df, cell_col=resolve_label_col(df),
+                                     entity_kind=entity_kind)
+    et = df["_etype"].astype(str)
+    cid = df["cell_id"].astype(str)
+    whole, part = cid[et == "cell"], cid[et == "partial"]
+    assigned = cid[et.isin(_ASSIGNED_ETYPES)]
+    out["n_entities"] = int(assigned.nunique())
+    out["n_whole_cells"] = int(whole.nunique())
+    out["n_partial_cells"] = int(part.nunique())
+    if "feature_name" in df.columns:
+        out["n_genes"] = int(df["feature_name"].astype(str).nunique())
+    if len(assigned):
+        out["median_transcripts_per_entity"] = float(assigned.value_counts().median())
+    if whole.nunique():
+        out["mean_transcripts_per_whole_cell"] = float(len(whole)) / whole.nunique()
+    if part.nunique():
+        out["mean_transcripts_per_partial_cell"] = float(len(part)) / part.nunique()
+    return out
+
+
+def _run_noseg(args, *, method: str) -> int:
+    """Drive TRACER's no-seg pipeline for `tracer_seq`.
+
+    Segmented mode consumes a transcript table; no-seg mode consumes the binned
+    matrix directly and reconstructs pseudocell profiles, so it is a separate
+    entry point rather than a flag on the same one. Entities here are
+    reconstructed profiles over bins, which is why the registry gives
+    tracer_seq entity_kind="bin".
+    """
+    import subprocess
+
+    outdir = Path(args.outdir)
+    outdir.mkdir(parents=True, exist_ok=True)
+    log = setup_logging(outdir)
+    matrix = _base.require_input(args, "visiumhd_matrix", "--visiumhd-matrix")
+    spatial = _base.require_input(args, "spatial_dir", "--spatial-dir")
+    pmi = _base.require_input(args, "pmi", "--pmi")
+
+    tracer_src = Path(os.environ.get(
+        "TRACER_HOME", Path(_REPO_ROOT).parent / "TRACER")) / "src"
+    platform_cfg = tracer_src / "tracer" / "configs" / "platforms" / "noseg.toml"
+
+    timer = Timer(log)
+    cmd = [sys.executable, "-m", "tracer.noseg_pipeline",
+           "--visiumhd-matrix", str(matrix),
+           "--spatial-dir", str(spatial),
+           "--pmi", str(pmi),
+           "--platform-config", str(platform_cfg),
+           "--outdir", str(outdir),
+           "--sample-name", str(args.sample_name),
+           "--bin-size-um", str(args.bin_size_um),
+           "--seed", str(args.seed),
+           "--n-jobs", str(args.threads or 8)]
+    if args.overwrite:
+        cmd.append("--overwrite")
+    if args.max_transcripts:
+        cmd += ["--max-transcripts", str(args.max_transcripts)]
+
+    env = dict(os.environ)
+    env["PYTHONPATH"] = str(tracer_src) + os.pathsep + env.get("PYTHONPATH", "")
+    log.info("[exec] %s", " ".join(cmd))
+    with timer.time("run_method"):
+        proc = subprocess.run(cmd, env=env, capture_output=True, text=True)
+    for line in (proc.stdout or "").splitlines()[-40:]:
+        log.info("[stdout] %s", line)
+    if proc.returncode != 0:
+        for line in (proc.stderr or "").splitlines()[-30:]:
+            log.error("[stderr] %s", line)
+        raise SystemExit(f"tracer no-seg failed (exit {proc.returncode}); see run.log.")
+
+    assign = outdir / "outputs" / "bin_to_profile_assignment.parquet"
+    entities: dict = {"entity_kind": "bin"}
+    transcripts: dict = {}
+    if assign.exists():
+        a = pd.read_parquet(assign)
+        col = next((c for c in ("profile_id", "cell_id", "pseudocell_id")
+                    if c in a.columns), None)
+        if col:
+            pid = a[col].astype(str)
+            assigned = pid[~pid.isin(("-1", "UNASSIGNED", "nan", ""))]
+            entities["n_entities"] = int(assigned.nunique())
+            if len(assigned):
+                entities["median_transcripts_per_entity"] = float(
+                    assigned.value_counts().median())
+            transcripts = {
+                "n_total": int(len(pid)),
+                "n_assigned": int(len(assigned)),
+                "n_unassigned": int(len(pid) - len(assigned)),
+                "frac_assigned": (float(len(assigned)) / len(pid)) if len(pid) else None,
+                "n_input": int(len(pid)),
+                "delta_vs_input": 0,
+            }
+
+    stx.write_benchmark_stats(
+        outdir=outdir, method=method, modality="sequencing",
+        sample_name=args.sample_name, timer=timer, dataset=args.dataset,
+        transcripts=transcripts, entities=entities,
+        qc={"mode": "noseg", "bin_size_um": float(args.bin_size_um),
+            "pmi_panel": str(pmi)},
+        outputs=[str(x) for x in sorted((outdir / "outputs").glob("*.parquet"))],
+        notes="TRACER no-seg mode: entities are reconstructed profiles over "
+              "bins, not segmented cells.")
+    log.info("DONE (no-seg).")
     return 0
 
 

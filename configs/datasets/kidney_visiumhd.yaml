@@ -15,6 +15,10 @@ inputs:
   nucleus_geojson: ${SEGBENCH_DATA}/kidney_visiumhd_10x/segmented_outputs/nucleus_segmentations.geojson
   segmented_h5:    ${SEGBENCH_DATA}/kidney_visiumhd_10x/segmented_outputs/filtered_feature_cell_matrix.h5
   # Naik healthy-control kidney scRNA (HC1-HC6), 15,198 cells / 9 lineages.
+  # tracer_seq (no-seg) consumes the binned matrix directly, not a
+  # transcript table.
+  visiumhd_matrix: ${SEGBENCH_DATA}/kidney_visiumhd_10x/segmented_outputs/binned_outputs/square_002um/filtered_feature_bc_matrix
+  spatial_dir:     ${SEGBENCH_DATA}/kidney_visiumhd_10x/segmented_outputs/binned_outputs/square_002um/spatial
   reference_h5ad:  /home/lyuan13/scr4_adeshpa6/TRACER/results/tracer_noseg/_ref/kidney_ref_noschwann.h5ad
   reference_celltype_col: cell_type
   pmi: /scratch4/adeshpa6/segbench_runs/kidney_visiumhd/reference/kidney_pmi.csv.gz
