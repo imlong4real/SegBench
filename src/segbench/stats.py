@@ -120,8 +120,13 @@ def entity_accounting(
     if df is not None and cell_col in getattr(df, "columns", []):
         cid = df[cell_col].astype(str)
         assigned = cid[cid != unassigned_token]
-        out["n_entities"] = int(assigned.nunique())
-        if gene_col in df.columns:
+        if n_entities is None:
+            out["n_entities"] = int(assigned.nunique())
+        # Only derive the gene count from the table when the caller did not
+        # supply one. Bin-level tables (Bin2Cell) carry a placeholder in
+        # `feature_name` because a bin holds a whole expression vector, so
+        # counting distinct values there would report 1 gene.
+        if n_genes is None and gene_col in df.columns:
             out["n_genes"] = int(df[gene_col].astype(str).nunique())
         # Median transcripts per entity is the cheapest useful size summary.
         if len(assigned):
