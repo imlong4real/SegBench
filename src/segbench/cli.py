@@ -292,6 +292,7 @@ def cmd_evaluate(args: argparse.Namespace) -> int:
         else:
             rdir = d / "rctd"
             per_cell = rdir / "rctd_cell_assignments_post.tsv"
+            prep_json = rdir / "rctd_input_info.json"
             if not per_cell.exists():
                 print(f"    running RCTD for {row.method} ...")
                 # Normalise the matrix first: RCTD needs float64 integers, and
@@ -299,11 +300,20 @@ def cmd_evaluate(args: argparse.Namespace) -> int:
                 try:
                     prep = ev.prepare_counts_for_rctd(
                         cell_h5ad, rdir / "rctd_input.h5ad", log=print)
-                    for k, v in prep.items():
-                        row.set(k, v)
-                    cell_h5ad = Path(prep["rctd_input_h5ad"])
+                    prep_json.parent.mkdir(parents=True, exist_ok=True)
+                    prep_json.write_text(json.dumps(prep, indent=2))
                 except Exception as exc:
                     print(f"    (count normalisation failed: {exc})")
+                    prep = {}
+            else:
+                # RCTD is cached. Re-read what it was actually given: the
+                # downstream metrics must score the SAME matrix RCTD scored,
+                # or a rounded run and a cached run disagree.
+                prep = json.loads(prep_json.read_text()) if prep_json.exists() else {}
+            for k, v in prep.items():
+                row.set(k, v)
+            if prep.get("rctd_input_h5ad") and Path(prep["rctd_input_h5ad"]).exists():
+                cell_h5ad = Path(prep["rctd_input_h5ad"])
                 res = ev.run_rctd(
                     cell_h5ad=cell_h5ad, reference_h5ad=Path(ref),
                     celltype_col=ct_col, outdir=rdir, rscript=rscript,
