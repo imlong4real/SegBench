@@ -289,6 +289,16 @@ def cmd_evaluate(args: argparse.Namespace) -> int:
             per_cell = rdir / "rctd_cell_assignments_post.tsv"
             if not per_cell.exists():
                 print(f"    running RCTD for {row.method} ...")
+                # Normalise the matrix first: RCTD needs float64 integers, and
+                # method outputs violate that in two different ways.
+                try:
+                    prep = ev.prepare_counts_for_rctd(
+                        cell_h5ad, rdir / "rctd_input.h5ad", log=print)
+                    for k, v in prep.items():
+                        row.set(k, v)
+                    cell_h5ad = Path(prep["rctd_input_h5ad"])
+                except Exception as exc:
+                    print(f"    (count normalisation failed: {exc})")
                 res = ev.run_rctd(
                     cell_h5ad=cell_h5ad, reference_h5ad=Path(ref),
                     celltype_col=ct_col, outdir=rdir, rscript=rscript,

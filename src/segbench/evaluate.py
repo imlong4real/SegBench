@@ -200,6 +200,58 @@ def tracer_conflict_purity(row: EvalRow, run_dir: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
+
+def prepare_counts_for_rctd(src: Path, dest: Path, *, log=None) -> dict:
+    """Write an RCTD-ready copy of a cell-by-gene h5ad.
+
+    RCTD (spacexr) has two hard requirements that method outputs routinely
+    violate, in different ways:
+
+      * the count matrix must be double-precision — a float32/int32 CSR comes
+        back to R as a dgRMatrix whose 'x' slot is not double, and spacexr
+        rejects it outright;
+      * counts must be integers — SPLIT returns *fractional expected* counts
+        by construction, so it fails `SpatialRNA: counts does not contain
+        integers`.
+
+    Normalising once here, rather than in each wrapper, keeps every method on
+    the identical RCTD code path. Rounding is recorded and surfaced in the
+    comparison table so a rounded matrix is never silently presented as if it
+    had been integral to begin with.
+    """
+    import anndata as ad
+    import numpy as _np
+    import scipy.sparse as sp
+
+    a = ad.read_h5ad(src)
+    X = a.layers["counts"] if "counts" in a.layers else a.X
+    was_sparse = sp.issparse(X)
+    dense_probe = (X[:200].toarray() if was_sparse else _np.asarray(X[:200]))
+    fractional = not bool(_np.allclose(dense_probe, _np.round(dense_probe)))
+
+    X = X.astype(_np.float64) if was_sparse else _np.asarray(X, dtype=_np.float64)
+    if fractional:
+        # Round to the nearest integer; expected counts below 0.5 disappear,
+        # which is the standard way of making a fractional profile RCTD-able.
+        X = X.copy()
+        if was_sparse:
+            X.data = _np.round(X.data)
+            X.eliminate_zeros()
+        else:
+            X = _np.round(X)
+
+    out = ad.AnnData(X=sp.csr_matrix(X) if was_sparse else X,
+                     obs=a.obs.copy(), var=a.var.copy())
+    out.layers["counts"] = out.X.copy()
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    out.write_h5ad(dest)
+    if log:
+        log(f"    RCTD input normalised -> float64"
+            f"{', rounded (was fractional)' if fractional else ''}")
+    return {"rctd_counts_rounded": bool(fractional),
+            "rctd_input_h5ad": str(dest)}
+
+
 def run_rctd(*, cell_h5ad: Path, reference_h5ad: Path, celltype_col: str,
              outdir: Path, rscript: str, exclude_celltypes: list[str],
              cores: int = 4, reference_min_umi: int = 100,
