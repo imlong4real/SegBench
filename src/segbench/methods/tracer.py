@@ -632,8 +632,6 @@ def _run_noseg(args, *, method: str) -> int:
     reconstructed profiles over bins, which is why the registry gives
     tracer_seq entity_kind="bin".
     """
-    import subprocess
-
     outdir = Path(args.outdir)
     outdir.mkdir(parents=True, exist_ok=True)
     log = setup_logging(outdir)
@@ -663,22 +661,20 @@ def _run_noseg(args, *, method: str) -> int:
 
     env = dict(os.environ)
     env["PYTHONPATH"] = str(tracer_src) + os.pathsep + env.get("PYTHONPATH", "")
-    log.info("[exec] %s", " ".join(cmd))
     with timer.time("run_method"):
-        proc = subprocess.run(cmd, env=env, capture_output=True, text=True)
-    for line in (proc.stdout or "").splitlines()[-40:]:
-        log.info("[stdout] %s", line)
-    if proc.returncode != 0:
-        for line in (proc.stderr or "").splitlines()[-30:]:
-            log.error("[stderr] %s", line)
-        raise SystemExit(f"tracer no-seg failed (exit {proc.returncode}); see run.log.")
+        code, ext_rss = rc.run_subprocess(cmd, log=log, outdir=outdir, env=env)
+    # Attach the externally measured peak RSS after the stage closes.
+    timer.record_external("run_method", ext_rss)
+    if code != 0:
+        raise SystemExit(f"tracer no-seg failed (exit {code}); see run.log.")
 
     assign = outdir / "outputs" / "bin_to_profile_assignment.parquet"
     entities: dict = {"entity_kind": "bin"}
     transcripts: dict = {}
     if assign.exists():
         a = pd.read_parquet(assign)
-        col = next((c for c in ("profile_id", "cell_id", "pseudocell_id")
+        col = next((c for c in ("reconstructed_profile_id", "profile_id",
+                                "pseudocell_id", "cell_id")
                     if c in a.columns), None)
         if col:
             pid = a[col].astype(str)
