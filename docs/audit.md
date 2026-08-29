@@ -87,6 +87,81 @@ Segger quantity (cell count, transcript assignment, RCTD entropy / max weight,
 Kendall, marker LFC) is unaffected by the accelerator choice and stays
 comparable.
 
+---
+
+## Findings from the real benchmark runs
+
+### The cPMI builder on TRACER main produces unusable panels
+
+Every panel built with `scripts/build_pmi_from_scrna.py` on the current TRACER
+revision comes out degenerate: **`bootstrap_reps_used = 0` for every pair**, no
+`pos` classifications, and only low-co-occurrence rows retained
+(`n_cells_ij` median 3). TRACER's own panel from 2026-05-27 has median 50 reps
+and 15,688 `pos` pairs.
+
+Three builds were tried, all degenerate:
+
+| mode | extra flags | rows | kinds |
+|---|---|---:|---|
+| `all_pairs` | — | 6,370 | low_evidence 5,185 · indeterminate 1,174 · neg_one 11 |
+| `all_pairs` | `--active-bootstrap` | 6,370 | identical |
+| `sparse_pairs` | TRACER's own documented parameters | 4,171 | low_evidence 4,160 · neg_one 11 |
+
+**Controlled comparison.** Same TRACER code, same transcripts, same seed; only
+the panel differs:
+
+| panel | whole cells | partial | mean tx / whole | transcripts assigned |
+|---|---:|---:|---:|---:|
+| TRACER's validated 2026-05-27 panel | **54,546** | 2,972 | 25.7 | **91.7 %** |
+| panel derived here, today | 13,928 | 40 | 23.4 | **21.0 %** |
+
+With no coherent (`pos`) pairs, Mid-QC has nothing supporting cell integrity
+and dissolves cells. The suspect window is the four `metrics.py` commits after
+the May panel was built, in particular `refactor(pmi): rename npmi-named
+functions to pmi; metric-agnostic scoring builders`.
+
+**Consequence.** Both TRACER rows are reported. The derived-panel row is the
+run this benchmark specified; the validated-panel row is what TRACER does when
+its panel is sound. Reporting only one would misrepresent either the tool or
+the regression. This is a TRACER-side bug and was not patched here.
+
+### Integration bugs found by running real data
+
+These were in the benchmark harness itself, not the methods:
+
+| bug | symptom | fix |
+|---|---|---|
+| `entity_accounting` overwrote a caller-supplied gene count | Bin2Cell reported `n_genes = 1` — the bin table's `feature_name` is the `__bin__` placeholder | derived value only used when the caller supplies nothing |
+| `write_benchmark_stats` read `total_seconds` / `peak_rss_gb_observed` directly | TRACER (legacy `Timer`) emitted null runtime and null peak RSS | totals derived from the stage list when absent |
+| assignment counted on `cell_id` | TRACER uses `cell_id = "-1"` for unassigned, so it reported 100 % assigned and counted `-1` as an entity | assignment and entity counts read `_etype` (`cell` / `partial` / `unknown`) |
+
+The `_etype` fix is also what supplies the whole-vs-partial split, which is
+reported separately and never pooled — pooling would make
+mean-transcripts-per-profile incomparable with methods that emit only whole
+cells.
+
+### Metric limitations
+
+- **Peak RSS is not measured the same way for every method.** Methods driven
+  as a subprocess get `/usr/bin/time` (`memory.source = external_time`);
+  in-process methods get a psutil sample (`psutil_inprocess`), which
+  underestimates. The plots hatch those bars and the table carries the source
+  column — check it before comparing memory.
+- **Runtime should be compared on `runtime_method_s`**, not the total, which
+  includes per-method format conversion.
+- **Segger contributes no row** (blocked upstream, see
+  `reproducibility/segger_env_notes.md`), so it is absent from the comparison
+  rather than present with fabricated values.
+- **Entity kinds are not interchangeable.** Bin2Cell rows are 2 um bins before
+  cell calling and cells after; `entity_kind` carries this and bin counts must
+  never be compared against cell counts.
+- **RCTD, Kendall and marker specificity all derive from one label source** —
+  RCTD's `dominant_celltype` — so no method gets an independently tuned label
+  transfer that would confound the metric with the transfer.
+- **Rare reference cell types are excluded** below `--min-reference-cells`
+  (default 50), applied identically to every method, with the dropped types
+  recorded.
+
 ## 3. Environments installed
 
 Built under `$SEGBENCH_ENV_ROOT` (`/scratch4/adeshpa6/segbench_envs`) and wired
