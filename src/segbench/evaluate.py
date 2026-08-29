@@ -176,7 +176,11 @@ def runtime_metrics(row: EvalRow, stats: dict) -> None:
     row.set("runtime_method_s", rt.get("method_seconds"))
     row.set("peak_rss_gb", mem.get("peak_rss_gb"))
     row.set("peak_rss_source", mem.get("source"))
-    if mem.get("source") != "external_time":
+    src = mem.get("source")
+    if src == "unmeasured":
+        row.notes["peak_rss_gb"] = mem.get(
+            "note", "peak RSS was not measured for this run")
+    elif src != "external_time":
         row.notes["peak_rss_gb"] = (
             "measured in-process (no external subprocess to wrap); "
             "an underestimate relative to /usr/bin/time figures")
