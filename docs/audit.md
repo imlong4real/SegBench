@@ -162,6 +162,70 @@ cells.
   (default 50), applied identically to every method, with the dropped types
   recorded.
 
+---
+
+## Installed environments
+
+Every method's environment was built; `scripts/setup_environments.sh`
+reproduces all of them. What each needed, and what had to be worked around:
+
+| method | runtime | notes |
+|---|---|---|
+| baysor | Julia binary 0.7.1 | prebuilt release; no build required |
+| proseg | Rust 3.2.0 | **no prebuilt Linux asset is published** — must be `cargo install`ed (~25 min) |
+| segger | Python + CUDA | installs, but see the upstream block below |
+| split | R 4.3.3 + spacexr + SPLIT | SPLIT additionally needs BiocParallel, S4Vectors, SingleCellExperiment, rhdf5 from **bioconda** — a conda-forge-only solve silently omits them |
+| celladmix | R 4.3.3 + cellAdmix | needs CRF, which is **archived on CRAN** and must be installed from the archive URL |
+| tracer / tracer_seq | Python | TRACER's own venv |
+| bin2cell | Python + stardist | — |
+
+Three environment lessons are encoded in the setup script because each cost a
+failed run to discover:
+
+1. **conda solves must not run on the login node.** A per-user memory cgroup
+   OOM-killed mamba mid-solve.
+2. **R GitHub installs must be serialized.** Two concurrent jobs fought over
+   the library lock, and SPLIT's resulting `failed to lock directory` error
+   looked exactly like a build failure.
+3. **Never `mamba install` a single R package into a working R env.**
+   Installing `r-anndata` — which does not exist on conda-forge — moved
+   `r-base` 4.3 → 4.4.3 and orphaned every package compiled against 4.3
+   (Seurat, NMF, nnls, remotes). The repair solve then deadlocked on
+   r-cairo/icu. The env had to be rebuilt in a single solve.
+
+## Harness bugs found by running real data
+
+None of these were caught by imports, compilation, or `--dry-run`; each needed
+a real run against real data.
+
+| bug | how it presented | why it mattered |
+|---|---|---|
+| `entity_accounting` overwrote a caller-supplied gene count | Bin2Cell reported `n_genes = 1` | the bin table's `feature_name` is the `__bin__` placeholder |
+| `write_benchmark_stats` read timer aggregates directly | TRACER emitted null runtime and null peak RSS | TRACER's wrapper carries a legacy `Timer` with no aggregate properties |
+| assignment counted on `cell_id` | TRACER reported 100 % of transcripts assigned | TRACER uses `cell_id = "-1"` for unassigned; `_etype` is the real signal |
+| three helpers referenced but never defined | imported, compiled and passed `--dry-run`; died on SLURM **after** the method had finished computing | an edit anchor silently failed to match. Now caught by an AST check in `tests/smoke_test.py` |
+| RCTD ids compared across dtypes | proseg's Kendall/marker columns came back empty with a misleading "no cell type reached 5 spatial cells" | proseg names cells with integers → pandas float64 index → reindex against string `obs_names` matched nothing. Baysor was unaffected because its ids are strings |
+| cell-by-gene glob required a suffix | every TRACER reference metric said "no cell_by_gene.h5ad" | TRACER writes `cell_by_gene_tracer.h5ad` |
+| `prepare_tsu20_common_inputs.py` read the literal key `"_index"` | `KeyError: object '_index' doesn't exist` | AnnData stores the real index key in an *attribute*; this reference uses `"gene"` |
+| SPLIT's R invocation hardcoded the TSU-20 path | would have run every dataset against the same sample | silent wrong-answer bug, not a crash |
+
+## Method outcomes
+
+| method | dataset | outcome |
+|---|---|---|
+| baysor | NSCLC Xenium | complete, full metric set |
+| proseg | NSCLC Xenium | complete, full metric set |
+| split | NSCLC Xenium | complete (cell-level; transcript columns are `n/a` by construction) |
+| celladmix | NSCLC Xenium | run executed |
+| tracer | NSCLC Xenium | complete, reported against both the derived and the validated panel |
+| **segger** | NSCLC Xenium | **blocked upstream** — no row emitted |
+| bin2cell | kidney Visium HD | complete |
+| tracer (seg) | kidney Visium HD | run executed |
+| tracer_seq | kidney Visium HD | run executed |
+
+Segger is absent from the comparison table rather than present with fabricated
+values. See `reproducibility/segger_env_notes.md` for the five-failure chain.
+
 ## 3. Environments installed
 
 Built under `$SEGBENCH_ENV_ROOT` (`/scratch4/adeshpa6/segbench_envs`) and wired
