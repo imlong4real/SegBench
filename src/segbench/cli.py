@@ -223,6 +223,76 @@ def cmd_collect(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_evaluate(args: argparse.Namespace) -> int:
+    """Score every method run under a root and emit the comparison table + plots."""
+    from . import evaluate as ev
+    from . import report as rp
+    from . import config as _c
+
+    root = Path(args.root)
+    run_dirs = sorted(p.parent for p in root.rglob("benchmark_stats.json"))
+    if not run_dirs:
+        raise SystemExit(f"No completed runs (benchmark_stats.json) under {root}")
+
+    cfg = {}
+    if args.dataset:
+        ds = _c.find_config(args.dataset, "datasets")
+        if ds:
+            cfg = _c.load_yaml(ds)
+    inputs = cfg.get("inputs", {}) if isinstance(cfg.get("inputs"), dict) else {}
+    ref = args.reference_h5ad or inputs.get("reference_h5ad")
+    ct_col = args.reference_celltype_col or inputs.get("reference_celltype_col")
+
+    kept, dropped = [], []
+    if ref and ct_col and Path(ref).exists():
+        kept, dropped = ev.common_celltypes(Path(ref), ct_col, args.min_reference_cells)
+        print(f"Reference cell types: keeping {len(kept)}, "
+              f"excluding {len(dropped)} with < {args.min_reference_cells} cells")
+        if dropped:
+            print(f"  excluded: {', '.join(dropped)}")
+
+    rows = []
+    for d in run_dirs:
+        stats = ev.read_stats(d)
+        if not stats:
+            continue
+        row = ev.EvalRow(dataset=args.dataset or root.name,
+                         method=stats.get("method", d.name),
+                         entity_kind=stats.get("entity_kind", "cell"),
+                         status=stats.get("status", "ok"))
+        ev.runtime_metrics(row, stats)
+        tx = next(iter(sorted(d.glob("outputs/*_standardized.parquet"))), None)
+        ev.entity_metrics(row, stats, tx)
+        ev.tracer_conflict_purity(row, d)
+        row.set("run_dir", str(d))
+        rows.append(row)
+        print(f"  scored {row.method}")
+
+    df = ev.build_table(rows)
+    outdir = Path(args.outdir) if args.outdir else root / "summary"
+    outdir.mkdir(parents=True, exist_ok=True)
+    csv = outdir / "comparison_table.csv"
+    df.to_csv(csv, index=False)
+    print(f"\nWrote {csv}  ({len(df)} methods)")
+
+    if not args.no_plots:
+        try:
+            f1 = rp.comparison_figure(df, outdir / "comparison",
+                                      title=f"SegBench — {args.dataset or root.name}")
+            print(f"Wrote {f1}")
+            f2 = rp.runtime_memory_scatter(df, outdir / "cost_scatter")
+            if f2:
+                print(f"Wrote {f2}")
+        except Exception as exc:
+            print(f"[warn] plotting failed: {type(exc).__name__}: {exc}")
+    md = rp.write_markdown_summary(df, outdir / "comparison.md",
+                                   dataset=args.dataset or root.name,
+                                   excluded_celltypes=dropped,
+                                   min_reference_cells=args.min_reference_cells)
+    print(f"Wrote {md}")
+    return 0
+
+
 def cmd_selftest(args: argparse.Namespace) -> int:
     """Run the dependency-free wiring check in tests/smoke_test.py."""
     script = REPO_ROOT / "tests" / "smoke_test.py"
@@ -268,6 +338,19 @@ def build_parser() -> argparse.ArgumentParser:
     ps.add_argument("--extra", nargs=argparse.REMAINDER,
                     help="extra flags appended to every method invocation")
     ps.set_defaults(func=cmd_suite)
+
+    pe = sub.add_parser("evaluate",
+                        help="score all runs under a root -> comparison CSV + plots")
+    pe.add_argument("root", help="directory containing method run dirs")
+    pe.add_argument("--dataset", default=None, help="dataset config name")
+    pe.add_argument("--outdir", default=None)
+    pe.add_argument("--reference-h5ad", default=None)
+    pe.add_argument("--reference-celltype-col", default=None)
+    pe.add_argument("--min-reference-cells", type=int,
+                    default=50, help="drop reference cell types below this "
+                                       "count from RCTD/marker metrics")
+    pe.add_argument("--no-plots", action="store_true")
+    pe.set_defaults(func=cmd_evaluate)
 
     pt = sub.add_parser("selftest", help="run the dependency-free wiring check")
     pt.set_defaults(func=cmd_selftest)
