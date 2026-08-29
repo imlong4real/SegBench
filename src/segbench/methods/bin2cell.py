@@ -87,8 +87,15 @@ def build_argparser() -> argparse.ArgumentParser:
     p.add_argument("--use-gex", action="store_true",
                    help="Also segment a gene-expression density image and "
                         "combine it with the H&E labels (bin2cell 'salvage').")
-    p.add_argument("--expand-microns", type=float, default=2.0,
-                   help="Label expansion distance in microns.")
+    p.add_argument("--expand-algorithm", default="max_bin_distance",
+                   choices=("max_bin_distance", "volume_ratio"),
+                   help="bin2cell.expand_labels algorithm.")
+    p.add_argument("--max-bin-distance", type=int, default=2,
+                   help="Bins a label may grow outward (max_bin_distance algorithm).")
+    p.add_argument("--volume-ratio", type=float, default=4.0,
+                   help="Target expanded/original volume (volume_ratio algorithm).")
+    p.add_argument("--expand-k", type=int, default=4,
+                   help="bin2cell.expand_labels k (neighbourhood size).")
     p.add_argument("--min-counts", type=int, default=1,
                    help="Drop bins below this total count before segmentation.")
     p.add_argument("--no-destripe", action="store_true",
@@ -220,9 +227,10 @@ def main(argv: list[str] | None = None) -> int:
 
         b2c.expand_labels(adata, labels_key=labels_key,
                           expanded_labels_key="labels_he_expanded",
-                          max_bin_distance=None,
-                          algorithm="volume_ratio",
-                          expand_microns=args.expand_microns)
+                          algorithm=args.expand_algorithm,
+                          max_bin_distance=args.max_bin_distance,
+                          volume_ratio=args.volume_ratio,
+                          k=args.expand_k)
         final_labels = "labels_he_expanded"
 
         if args.use_gex:
@@ -280,7 +288,8 @@ def main(argv: list[str] | None = None) -> int:
                     "labels_npz": str(args.labels_npz or "")},
             outputs=outs, method_version=b2c_version, runner_kind="python", log=log,
             extra_config={"mpp": args.mpp, "prob_thresh": args.prob_thresh,
-                          "expand_microns": args.expand_microns,
+                          "expand_algorithm": args.expand_algorithm,
+                          "max_bin_distance": args.max_bin_distance,
                           "use_gex": args.use_gex,
                           "stardist_model": args.stardist_model},
             summary_extra_lines=[
@@ -302,7 +311,8 @@ def main(argv: list[str] | None = None) -> int:
             "median_bins_per_cell": float(np.median(
                 cdata.obs["bin_count"])) if "bin_count" in cdata.obs else None,
             "mpp": float(args.mpp),
-            "expand_microns": float(args.expand_microns),
+            "expand_algorithm": args.expand_algorithm,
+            "max_bin_distance": int(args.max_bin_distance),
             "used_stardist": args.labels_npz is None,
             "used_gex_salvage": bool(args.use_gex)},
         method_version=b2c_version, outputs=outs,

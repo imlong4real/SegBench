@@ -9,6 +9,9 @@ bin2cell:
   prob_thresh_gex: 0.05
   stardist_model_gex: 2D_versatile_fluo
   use_gex: false
-  expand_microns: 2.0
+  expand_algorithm: max_bin_distance
+  max_bin_distance: 2
+  volume_ratio: 4.0
+  expand_k: 4
   min_counts: 1
   no_destripe: false

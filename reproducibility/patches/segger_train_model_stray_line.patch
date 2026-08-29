@@ -1,0 +1,10 @@
+--- /tmp/train_model.orig.py	2026-08-29 12:44:28.600471293 -0400
++++ /scratch4/adeshpa6/segbench_envs/venvs/segger/lib/python3.11/site-packages/segger/cli/train_model.py	2026-08-29 12:44:28.625150000 -0400
+@@ -59,7 +59,6 @@
+     from lightning import Trainer
+ 
+     logging.info("Done.")
+-uv a
+     # Load datasets
+     logging.info("Loading Xenium datasets...")
+     dm = SeggerDataModule(
