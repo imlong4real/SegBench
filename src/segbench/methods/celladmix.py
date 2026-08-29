@@ -155,7 +155,6 @@ def main(argv: list[str] | None = None) -> int:
     else:
         if not R_SCRIPT.exists():
             raise SystemExit(f"cellAdmix R script not found: {R_SCRIPT}")
-        log.info("RUN mode — invoking cellAdmix via conda env '%s'", args.r_env)
         with timer.time("run_method"):
             launcher = ([args.rscript] if args.rscript
                         else ["conda", "run", "-n", args.r_env, "Rscript"])
