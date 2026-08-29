@@ -28,10 +28,10 @@ methods:
     python: ${SEGBENCH_ENV_ROOT}/venvs/bin2cell/bin/python
 
   split:
-    rscript: ${SEGBENCH_ENV_ROOT}/envs/r/bin/Rscript
+    rscript: ${SEGBENCH_ENV_ROOT}/envs/r2/bin/Rscript
 
   celladmix:
-    rscript: ${SEGBENCH_ENV_ROOT}/envs/r/bin/Rscript
+    rscript: ${SEGBENCH_ENV_ROOT}/envs/r2/bin/Rscript
 
   tracer:
     python: ${TRACER_VENV}/bin/python
