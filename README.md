@@ -44,9 +44,20 @@ Point `SEGBENCH_DATA` at wherever your datasets live so configs stay portable:
 export SEGBENCH_DATA=/scratch/$USER/spatial_data
 ```
 
-### Method dependencies
+### Method environments
 
-Each method needs its own external tool. Install only the ones you want, then
+Methods need genuinely different runtimes (a Julia binary, a Rust binary, R, a
+CUDA Python). `configs/environments.yaml` declares one per method and is the
+only file naming machine-specific paths; everything resolves through `${VAR}`:
+
+```bash
+cp configs/environments.local.example.sh configs/environments.local.sh
+$EDITOR configs/environments.local.sh     # set SEGBENCH_ENV_ROOT, TRACER_VENV
+source configs/environments.local.sh
+```
+
+`segbench run <method>` then **re-execs into that method's own interpreter**,
+so nothing needs activating by hand. Install only the methods you want, then
 ask which are ready:
 
 ```bash
@@ -138,6 +149,27 @@ failing method does not abort the rest — a partial benchmark is more useful
 than none. The suite writes `benchmark_summary.tsv` and `suite_result.json`
 into the output root.
 
+### Scoring and comparing
+
+`collect` stacks the per-run stats; `evaluate` additionally computes the
+cross-method biological metrics and draws the comparison figures:
+
+```bash
+segbench evaluate /scratch4/$USER/segbench_runs/nsclc_xenium/methods \
+  --dataset nsclc_xenium --min-reference-cells 50
+```
+
+writes `comparison_table.csv`, `comparison.{png,pdf}`, `cost_scatter.{png,pdf}`
+and `comparison.md`. Metric definitions are held identical across methods by
+routing every method through the same code (RCTD via `run_rctd.R`, Kendall and
+marker log2FC via `get_metric.py`). Quantities that genuinely differ in meaning
+are reported as `n/a` with a reason rather than coerced — see
+[docs/audit.md](docs/audit.md#5-metric-comparability).
+
+`--min-reference-cells` drops sparsely-represented reference cell types from
+RCTD and the marker/Kendall metrics so rare populations cannot dominate a
+median.
+
 ### Aggregating
 
 ```bash
@@ -154,8 +186,15 @@ baysor     ok      41.203100       38.902000     2.140000         311           
 
 ```bash
 segbench list [-v]        # methods, and whether they can run here
-segbench doctor [method]  # detailed dependency report (--json to save it)
+segbench doctor [method]  # resolved env paths + dependency report (--json)
 segbench selftest         # dependency-free wiring check
+```
+
+### On a cluster
+
+```bash
+sbatch --export=ALL,METHOD=proseg,DATASET=nsclc_xenium,SEGBENCH_REPO=$PWD \
+       scripts/slurm/run_method.sbatch
 ```
 
 ---
