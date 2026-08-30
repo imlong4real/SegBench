@@ -19,7 +19,10 @@ inputs:
   # transcript table.
   visiumhd_matrix: ${SEGBENCH_DATA}/kidney_visiumhd_10x/segmented_outputs/binned_outputs/square_002um/filtered_feature_bc_matrix
   spatial_dir:     ${SEGBENCH_DATA}/kidney_visiumhd_10x/segmented_outputs/binned_outputs/square_002um/spatial
-  reference_h5ad:  /home/lyuan13/scr4_adeshpa6/TRACER/results/tracer_noseg/_ref/kidney_ref_noschwann.h5ad
+  # The _rctd variant is identical except that cell-type names are
+  # sanitised (FIB_VSMC_P, not FIB/VSMC/P); spacexr rejects '/' in a
+  # cell-type name outright.
+  reference_h5ad:  /home/lyuan13/scr4_adeshpa6/TRACER/results/tracer_noseg/_ref/kidney_ref_noschwann_rctd.h5ad
   reference_celltype_col: cell_type
   pmi: /scratch4/adeshpa6/segbench_runs/kidney_visiumhd/reference/kidney_pmi.csv.gz
 

@@ -278,7 +278,9 @@ def cmd_evaluate(args: argparse.Namespace) -> int:
         # label transfer and the columns stay comparable.
         # TRACER names its file cell_by_gene_tracer.h5ad, so match the stem
         # anywhere rather than requiring it as a suffix.
-        cell_h5ad = next(iter(sorted(d.glob("outputs/*cell_by_gene*.h5ad"))), None)
+        cell_h5ad = next((q for pat in ("outputs/*cell_by_gene*.h5ad",
+                                        "outputs/profile_by_gene.h5ad")
+                          for q in sorted(d.glob(pat))), None)
         rscript = envs.resolve("split", "rscript") or envs.resolve("celladmix", "rscript")
         if args.skip_rctd:
             row.na("rctd_entropy_median", "skipped (--skip-rctd)")
