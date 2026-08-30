@@ -204,19 +204,48 @@ def runtime_metrics(row: EvalRow, stats: dict) -> None:
             "an underestimate relative to /usr/bin/time figures")
 
 
+#: cPMI score columns, mapped to the table name that reports them. Each entry
+#: lists the accepted source column names in priority order -- TRACER writes
+#: ``purity_score``/``conflict_score``, but older runs used the bare names.
+_CPMI_COLUMNS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("cpmi_purity", ("purity_score", "purity")),
+    ("cpmi_conflict", ("conflict_score", "conflict")),
+    ("cpmi_relative_purity", ("relative_purity",)),
+    ("cpmi_relative_conflict", ("relative_conflict",)),
+)
+
+
 def tracer_conflict_purity(row: EvalRow, run_dir: Path) -> None:
-    """cPMI conflict/purity, when the method run emitted them."""
+    """cPMI conflict/purity, when the method run emitted them.
+
+    Reports the median over entities. Only TRACER writes ``cell_scores`` --
+    for every other method the quantity is undefined, not zero, so the row is
+    marked rather than filled.
+    """
     for name in ("cell_scores.tsv.gz", "outputs/cell_scores.tsv.gz"):
-        p = Path(run_dir) / name
-        if p.exists():
-            try:
-                s = pd.read_csv(p, sep="\t")
-                for src, dst in (("purity", "cpmi_purity"), ("conflict", "cpmi_conflict")):
-                    if src in s.columns:
-                        row.set(dst, float(pd.to_numeric(s[src], errors="coerce").median()))
-                return
-            except Exception:
-                pass
+        path = Path(run_dir) / name
+        if not path.exists():
+            continue
+        try:
+            scores = pd.read_csv(path, sep="\t")
+        except Exception as exc:
+            row.na("cpmi_purity", f"cell scores unreadable ({exc})")
+            row.na("cpmi_conflict", f"cell scores unreadable ({exc})")
+            return
+        found = False
+        for dst, candidates in _CPMI_COLUMNS:
+            src = next((c for c in candidates if c in scores.columns), None)
+            if src is None:
+                continue
+            row.set(dst, float(pd.to_numeric(scores[src], errors="coerce").median()))
+            found = True
+        if not found:
+            # The file is there but carries none of the expected columns --
+            # say so, rather than leaving the cell blank with no explanation.
+            cols = ", ".join(map(str, scores.columns[:8]))
+            for dst in ("cpmi_purity", "cpmi_conflict"):
+                row.na(dst, f"cell scores present but no purity/conflict column ({cols})")
+        return
     row.na("cpmi_purity", "method does not emit cPMI cell scores")
     row.na("cpmi_conflict", "method does not emit cPMI cell scores")
 
@@ -329,7 +358,8 @@ def build_table(rows: list[EvalRow]) -> pd.DataFrame:
             "n_transcripts_unassigned", "frac_assigned",
             "rctd_entropy_median", "rctd_max_weight_median",
             "kendall_tau_median", "marker_logfc_median",
-            "cpmi_purity", "cpmi_conflict"]
+            "cpmi_purity", "cpmi_conflict",
+            "cpmi_relative_purity", "cpmi_relative_conflict"]
     cols = [c for c in lead if c in df.columns] + \
            [c for c in df.columns if c not in lead and not c.endswith("_note")] + \
            [c for c in df.columns if c.endswith("_note")]

@@ -208,6 +208,8 @@ a real run against real data.
 | cell-by-gene glob required a suffix | every TRACER reference metric said "no cell_by_gene.h5ad" | TRACER writes `cell_by_gene_tracer.h5ad` |
 | `prepare_tsu20_common_inputs.py` read the literal key `"_index"` | `KeyError: object '_index' doesn't exist` | AnnData stores the real index key in an *attribute*; this reference uses `"gene"` |
 | SPLIT's R invocation hardcoded the TSU-20 path | would have run every dataset against the same sample | silent wrong-answer bug, not a crash |
+| cPMI reader looked for `purity`/`conflict` | TRACER's purity/conflict columns were blank **with no note** | TRACER writes `purity_score`/`conflict_score`; the reader found the file, matched no column, and returned before the line that records a reason. A silently-empty cell is worse than a marked one, because it reads as "measured, and zero" |
+| RCTD relaunched over a cached result | bin2cell's kidney row showed `rctd_status = failed(rc=-9)` although its RCTD had completed | the launch was guarded on `rctd_input_info.json` existing, which is also true on the cache path. A finished 43-minute run was re-executed, OOM-killed, and its good status overwritten. Launching is now gated on the per-cell table being absent *and* `--skip-rctd` being off |
 
 ## Method outcomes
 
@@ -370,7 +372,7 @@ Reported as `n/a` with a reason in `<column>_note` rather than coerced:
 | per-transcript assignment | **SPLIT** | `purify` returns fractional *expected counts*; which molecule was removed is not recoverable. Scored at cell level, with count-level pruning estimates instead. |
 | entity counts | **Bin2Cell** | Rows are 2 µm **bins**; the cell count is a separate quantity. `entity_kind` carries this and a bin count must never be compared to a cell count. |
 | mean transcripts / profile | **TRACER** | Reported separately as whole vs partial cells; pooling them would make the mean incomparable with methods emitting only whole cells. |
-| cPMI conflict / purity | non-TRACER methods | Panel-relative quantities, only defined for runs scored against the same cPMI panel. |
+| cPMI conflict / purity | non-TRACER methods | Panel-relative quantities, only defined for runs scored against the same cPMI panel. TRACER reports the median over entities of `purity_score` and `conflict_score`, plus the `relative_*` variants. |
 | peak RSS | in-process methods | `memory.source` distinguishes `external_time` (`/usr/bin/time` around the real tool) from `psutil_inprocess`, which underestimates. Plots hatch the latter. |
 
 ### Runtime

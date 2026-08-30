@@ -302,9 +302,12 @@ def cmd_evaluate(args: argparse.Namespace) -> int:
             rdir = d / "rctd"
             per_cell = rdir / "rctd_cell_assignments_post.tsv"
             prep_json = rdir / "rctd_input_info.json"
-            if not per_cell.exists() and args.skip_rctd:
-                pass  # nothing cached and launching was suppressed
-            elif not per_cell.exists():
+            # Launch only when nothing is cached AND launching is permitted.
+            # Re-running RCTD over a finished result costs hours of allocation
+            # and, if the relaunch dies, replaces a good status with a failure.
+            launch = not per_cell.exists() and not args.skip_rctd
+            prep: dict = {}
+            if launch:
                 print(f"    running RCTD for {row.method} ...")
                 # Normalise the matrix first: RCTD needs float64 integers, and
                 # method outputs violate that in two different ways.
@@ -315,22 +318,34 @@ def cmd_evaluate(args: argparse.Namespace) -> int:
                     prep_json.write_text(json.dumps(prep, indent=2))
                 except Exception as exc:
                     print(f"    (count normalisation failed: {exc})")
-                    prep = {}
-            else:
+            elif prep_json.exists():
                 # RCTD is cached. Re-read what it was actually given: the
                 # downstream metrics must score the SAME matrix RCTD scored,
                 # or a rounded run and a cached run disagree.
-                prep = json.loads(prep_json.read_text()) if prep_json.exists() else {}
+                prep = json.loads(prep_json.read_text())
             for k, v in prep.items():
                 row.set(k, v)
             if prep.get("rctd_input_h5ad") and Path(prep["rctd_input_h5ad"]).exists():
                 cell_h5ad = Path(prep["rctd_input_h5ad"])
+            if launch and prep.get("rctd_input_h5ad"):
                 res = ev.run_rctd(
                     cell_h5ad=cell_h5ad, reference_h5ad=Path(ref),
                     celltype_col=ct_col, outdir=rdir, rscript=rscript,
                     exclude_celltypes=dropped, cores=args.rctd_cores)
                 for k, v in res.items():
                     row.set(k, v)
+            elif per_cell.exists():
+                # Reused result: recover the provenance the launch path would
+                # have recorded, so a cached row is not silently blank.
+                row.set("rctd_status", "ok (cached)")
+                _sum = rdir / "rctd_run_summary.json"
+                if _sum.exists():
+                    try:
+                        _r = json.loads(_sum.read_text()).get("runs", {}).get("post", {})
+                        if _r.get("n_cells"):
+                            row.set("rctd_n_cells_scored", int(_r["n_cells"]))
+                    except Exception:
+                        pass
             if per_cell.exists():
                 if "rctd_entropy_median" not in row.values:
                     df_rc = pd.read_csv(per_cell, sep="\t")

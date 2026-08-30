@@ -12,7 +12,10 @@ cd "$REPO"
 [ -f configs/environments.local.sh ] && source configs/environments.local.sh \
                                      || source configs/environments.local.example.sh
 
-RUNS="${1:-/scratch4/$USER/segbench_runs}"
+# Runs root: explicit arg > $SEGBENCH_RUNS > scratch under $USER. The last
+# is only a guess -- on shared-allocation machines the scratch directory is
+# named for the group, not the login, so set SEGBENCH_RUNS there.
+RUNS="${1:-${SEGBENCH_RUNS:-/scratch4/$USER/segbench_runs}}"
 OUT="${2:-$RUNS/final_report}"
 mkdir -p "$OUT"
 
