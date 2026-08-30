@@ -170,7 +170,13 @@ def write_markdown_summary(df: pd.DataFrame, out_path: Path, *,
                            min_reference_cells: int | None = None) -> Path:
     """Human-readable summary, including what is NOT comparable and why."""
     lines = [f"# SegBench comparison — {dataset}", ""]
-    show = [c for c in ("method", "entity_kind", "runtime_method_s", "peak_rss_gb",
+    # A cross-dataset table has two rows called "tracer". Without the dataset
+    # column they are indistinguishable, so carry it whenever it varies.
+    multi_ds = "dataset" in df.columns and df["dataset"].nunique() > 1
+    def _label(r) -> str:
+        return f"{r['dataset']} / {r['method']}" if multi_ds else str(r["method"])
+    show = [c for c in (("dataset",) if multi_ds else ()) +
+                       ("method", "entity_kind", "runtime_method_s", "peak_rss_gb",
                         "n_entities", "mean_transcripts_per_profile", "frac_assigned",
                         "rctd_entropy_median", "rctd_max_weight_median",
                         "kendall_tau_median", "marker_logfc_median",
@@ -207,7 +213,7 @@ def write_markdown_summary(df: pd.DataFrame, out_path: Path, *,
             base = col[:-5]
             for _, r in df.iterrows():
                 if isinstance(r.get(col), str) and r[col]:
-                    lines.append(f"- **{r['method']} / {base}** — {r[col]}")
+                    lines.append(f"- **{_label(r)} / {base}** — {r[col]}")
         lines.append("")
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
