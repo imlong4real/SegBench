@@ -205,12 +205,24 @@ One command scores every method on both datasets and emits the unified
 summary CSV, the comparison plots and a markdown table:
 
 ```bash
-scripts/make_final_report.sh /scratch/$USER/segbench_runs
+scripts/make_final_report.sh
+```
+
+The runs root comes from `$SEGBENCH_RUNS` (set it in
+`configs/environments.local.sh`), or pass it as the first argument:
+
+```bash
+scripts/make_final_report.sh /path/to/segbench_runs
 ```
 
 It writes `final_report/segbench_summary.csv`, `segbench_comparison.png/pdf`,
 `segbench_cost.png/pdf` and `segbench_summary.md`. The `*_note` columns travel
 with the CSV so the non-comparable markers survive export.
+
+Scoring re-uses any RCTD result already on disk. To rebuild the report without
+launching RCTD at all -- useful when compute budget is short, since RCTD is by
+far the most expensive step -- set `EVAL_EXTRA=--skip-rctd`; cached per-cell
+tables are still read, and only methods with nothing cached are marked `n/a`.
 
 ### Aggregating
 
