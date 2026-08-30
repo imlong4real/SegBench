@@ -410,6 +410,41 @@ def _rctd_labels(rctd_per_cell: Path, obs_names) -> pd.Series:
     return lab.reindex(pd.Index(obs_names).astype(str))
 
 
+#: One panel-restricted reference per evaluate process. The reference is tens
+#: of thousands of genes wide, but only the spatial panel is ever scored and
+#: every method in a dataset shares one panel -- so re-reading it per method
+#: per metric (ten full loads for a five-method dataset) was both the peak
+#: memory driver and pure waste. Keyed by file and panel; holds one entry.
+_REF_CACHE: dict[tuple[str, tuple[str, ...]], object] = {}
+
+
+def _load_reference(reference_h5ad: Path, panel) -> object:
+    """Read the reference once, restricted to genes present in ``panel``.
+
+    Opened backed so the full matrix is never materialised: only the panel
+    columns are brought into memory.
+    """
+    import anndata as ad
+    key = (str(reference_h5ad), tuple(sorted(set(map(str, panel)))))
+    hit = _REF_CACHE.get(key)
+    if hit is not None:
+        return hit
+    _REF_CACHE.clear()          # one dataset at a time; don't stack references
+    backed = ad.read_h5ad(reference_h5ad, backed="r")
+    wanted = set(key[1])
+    shared = [g for g in map(str, backed.var_names) if g in wanted]
+    if not shared:
+        ref = backed.to_memory()
+    else:
+        ref = backed[:, shared].to_memory()
+    try:
+        backed.file.close()
+    except Exception:
+        pass
+    _REF_CACHE[key] = ref
+    return ref
+
+
 def reference_consistency(
     row: EvalRow, *, cell_h5ad: Path, rctd_per_cell: Path,
     reference_h5ad: Path, celltype_col: str, kept_types: list[str],
@@ -423,7 +458,7 @@ def reference_consistency(
     from scipy.stats import kendalltau, pearsonr
     try:
         q = ad.read_h5ad(cell_h5ad)
-        r = ad.read_h5ad(reference_h5ad)
+        r = _load_reference(reference_h5ad, q.var_names)
         lab = _rctd_labels(rctd_per_cell, q.obs_names)
     except Exception as exc:
         row.na("kendall_tau_median", f"inputs unreadable: {exc}")
@@ -477,7 +512,7 @@ def marker_specificity(
     import anndata as ad
     try:
         q = ad.read_h5ad(cell_h5ad)
-        r = ad.read_h5ad(reference_h5ad)
+        r = _load_reference(reference_h5ad, q.var_names)
         lab = _rctd_labels(rctd_per_cell, q.obs_names).reset_index(drop=True)
     except Exception as exc:
         row.na("marker_logfc_median", f"inputs unreadable: {exc}")

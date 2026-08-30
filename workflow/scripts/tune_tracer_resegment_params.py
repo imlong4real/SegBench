@@ -225,7 +225,7 @@ def run_one(dataset: str, combo_name: str, override: dict,
     outdir.mkdir(parents=True, exist_ok=True)
     cmd = [sys.executable, str(RUN_TRACER),
            "--transcripts", str(REPO / rin["transcripts"]),
-           "--npmi", str(REPO / rin["npmi"]),
+           "--pmi", str(REPO / rin["npmi"]),
            "--platform", rin["platform"],
            "--mode", "resegment",
            "--outdir", str(outdir),

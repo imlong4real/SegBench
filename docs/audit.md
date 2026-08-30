@@ -57,6 +57,17 @@ Touched: `run_tracer.py`, `noseg_pipeline.py`, `get_metric.py`,
 `--npmi-cache` / `--npmi-min-occurrences` flags, all shell examples and both
 READMEs.
 
+The legacy `workflow/` tree carried its own copies of these interfaces and was
+migrated in the same way: `workflow/scripts/get_metric.py`,
+`get_cell_level_metric.py`, `_benchmark/run_tracer_refine.py`
+(`--pmi-source` / `--pmi-path`), `tune_tracer_resegment_params.py` and
+`rules/_benchmark/tracer_refinement.smk`, which now emits the canonical flags
+while still reading the legacy `npmi_source` / `npmi_path` config keys.
+Renaming `dest` broke four `args.npmi` reader sites that argparse cannot catch
+at definition time; each was updated and every CLI was checked with `--help`
+to confirm both spellings still parse.
+
+
 Two defects surfaced and were fixed:
 
 - `tests/test_visiumhd_prep.py` greps the parser source for the flag
@@ -210,6 +221,7 @@ a real run against real data.
 | SPLIT's R invocation hardcoded the TSU-20 path | would have run every dataset against the same sample | silent wrong-answer bug, not a crash |
 | cPMI reader looked for `purity`/`conflict` | TRACER's purity/conflict columns were blank **with no note** | TRACER writes `purity_score`/`conflict_score`; the reader found the file, matched no column, and returned before the line that records a reason. A silently-empty cell is worse than a marked one, because it reads as "measured, and zero" |
 | RCTD relaunched over a cached result | bin2cell's kidney row showed `rctd_status = failed(rc=-9)` although its RCTD had completed | the launch was guarded on `rctd_input_info.json` existing, which is also true on the cache path. A finished 43-minute run was re-executed, OOM-killed, and its good status overwritten. Launching is now gated on the per-cell table being absent *and* `--skip-rctd` being off |
+| reference h5ad re-read per method, per metric | `segbench evaluate` was OOM-killed on the login node under its 5 GB per-user cgroup | the NSCLC reference is 50,000 x 72,131; both reference metrics loaded it in full, for every method -- ten complete loads per dataset. Only the spatial panel (302 of 72,131 genes) is ever scored, so the reference is now opened backed, restricted to the panel, and cached per process. Peak fell from >2.3 GB (killed) to ~0.6 GB and the evaluation runs on a login node |
 
 ## Method outcomes
 

@@ -142,9 +142,10 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--mode", default="refine_existing_segmentation")
     p.add_argument("--enable-seg-residual-cascade", action="store_true")
     p.add_argument("--enable-noseg-cascade", action="store_true")
-    p.add_argument("--npmi-source", default="panel_or_reference")
+    p.add_argument("--pmi-source", "--npmi-source", dest="pmi_source",
+                   default="panel_or_reference")
     p.add_argument("--gene-panel", default=None)
-    p.add_argument("--npmi-path", default=None)
+    p.add_argument("--pmi-path", "--npmi-path", dest="pmi_path", default=None)
     p.add_argument("--threads", type=int, default=None)
     p.add_argument("--log", default=None)
     p.add_argument("--allow-stub", action="store_true",
@@ -190,9 +191,9 @@ def main() -> None:
                 mode=args.mode,
                 enable_seg_residual_cascade=args.enable_seg_residual_cascade,
                 enable_noseg_cascade=args.enable_noseg_cascade,
-                npmi_source=args.npmi_source,
+                npmi_source=args.pmi_source,
                 gene_panel=args.gene_panel,
-                npmi_path=args.npmi_path,
+                npmi_path=args.pmi_path,
                 threads=args.threads,
             )
             if not isinstance(refined, pd.DataFrame):
@@ -232,7 +233,7 @@ def main() -> None:
             "mode": args.mode,
             "enable_seg_residual_cascade": args.enable_seg_residual_cascade,
             "enable_noseg_cascade": args.enable_noseg_cascade,
-            "npmi_source": args.npmi_source,
+            "npmi_source": args.pmi_source,
             "gene_panel": args.gene_panel,
             "tracer_entry_point": chosen_entry,
             "stub_refinement": used_stub,

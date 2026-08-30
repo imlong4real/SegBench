@@ -70,8 +70,8 @@ def build_argparser() -> argparse.ArgumentParser:
                         "(9 coarse types). Per-cell RCTD first_type labels are mapped "
                         "to this vocabulary via an ontology crosswalk.")
     p.add_argument("--runtime-json", type=Path, default=None)
-    p.add_argument("--npmi", type=Path, default=None,
-                   help="NPMI csv(.gz) panel. If given, NPMI-derived relative purity / "
+    p.add_argument("--pmi", "--npmi", dest="pmi", type=Path, default=None,
+                   help="cPMI csv(.gz) panel. If given, cPMI-derived relative purity / "
                         "relative conflict are computed before (original) vs after "
                         "(purified) on the shared cell-by-gene matrices. Purified "
                         "(fractional) counts are rounded for the transcript-count step.")
@@ -364,9 +364,9 @@ def main() -> int:
 
     # --- NPMI relative purity / conflict (before=original, after=purified) ---
     purity_conflict = {}
-    if args.npmi and Path(args.npmi).exists():
+    if args.pmi and Path(args.pmi).exists():
         try:
-            panel = _load_npmi_panel(args.npmi)
+            panel = _load_npmi_panel(args.pmi)
             pc_before = _purity_conflict(orig_block, shared_cells, shared_genes,
                                          panel, args.purity_tau, round_counts=False, log=log)
             pc_after = _purity_conflict(pur_block, shared_cells, shared_genes,

@@ -117,8 +117,8 @@ def build_argparser() -> argparse.ArgumentParser:
     p.add_argument("--reference-celltype-col", default="cell_type_harmonized",
                    help="obs column carrying the reference cell-type label.")
     p.add_argument("--outdir", required=True, type=Path)
-    p.add_argument("--npmi", type=Path, default=None,
-                   help="Optional NPMI csv(.gz) for purity/conflict + coherence.")
+    p.add_argument("--pmi", "--npmi", dest="pmi", type=Path, default=None,
+                   help="Optional cPMI csv(.gz) for purity/conflict + coherence.")
     p.add_argument("--runtime-json", type=Path, default=None,
                    help="Optional runtime/memory JSON to copy into outdir.")
     p.add_argument("--reference-marker-table", type=Path, default=None,
@@ -1034,9 +1034,9 @@ def main() -> int:
             )
 
     npmi_panel = None
-    if args.npmi is not None:
-        log.info("Loading NPMI panel: %s", args.npmi)
-        np_df = pd.read_csv(args.npmi)
+    if args.pmi is not None:
+        log.info("Loading NPMI panel: %s", args.pmi)
+        np_df = pd.read_csv(args.pmi)
         # Symmetric expansion
         rev = np_df.copy()
         rev["gene_i"], rev["gene_j"] = np_df["gene_j"].values, np_df["gene_i"].values

@@ -13,15 +13,16 @@ def _tracer_flag_args() -> str:
         flags.append("--enable-noseg-cascade")
     mode = TRACER_CFG.get("mode") or "refine_existing_segmentation"
     flags += ["--mode", mode]
-    npmi_source = TRACER_CFG.get("npmi_source")
-    if npmi_source:
-        flags += ["--npmi-source", npmi_source]
+    # Canonical config key is pmi_source; npmi_source is the legacy spelling.
+    pmi_source = TRACER_CFG.get("pmi_source") or TRACER_CFG.get("npmi_source")
+    if pmi_source:
+        flags += ["--pmi-source", pmi_source]
     gp = TRACER_CFG.get("gene_panel")
     if gp:
         flags += ["--gene-panel", gp]
-    np_ = TRACER_CFG.get("npmi_path")
-    if np_:
-        flags += ["--npmi-path", np_]
+    pmi_path = TRACER_CFG.get("pmi_path") or TRACER_CFG.get("npmi_path")
+    if pmi_path:
+        flags += ["--pmi-path", pmi_path]
     return " ".join(flags)
 
 
