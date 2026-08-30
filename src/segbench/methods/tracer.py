@@ -577,6 +577,22 @@ def main(argv: list[str] | None = None, method: str | None = None) -> int:
 # ---------------------------------------------------------------------------
 _ASSIGNED_ETYPES = ("cell", "partial")
 
+#: Column holding the ENTITY id. `cell_id` is the *parent* cell a fragment came
+#: from, so a partial and its parent share it and the whole/partial sets
+#: overlap (on NSCLC: 2,792 of 2,972 partials collided with a whole). Only
+#: `tracer_id` is unique per entity — partial `hmopkddj-1-2` vs parent
+#: `hmopkddj-1` — and gives disjoint sets.
+_ENTITY_ID_COLS = ("tracer_id", "cell_id")
+
+
+def _entity_id_col(df) -> str:
+    for c in _ENTITY_ID_COLS:
+        if c in df.columns:
+            return c
+    return "cell_id"
+
+
+
 
 def _tracer_transcript_accounting(df, *, n_input=None):
     if "_etype" not in df.columns:

@@ -167,11 +167,17 @@ def _tracer_whole_partial(row: EvalRow, transcripts: Path) -> None:
     except Exception as exc:
         row.notes["n_whole_cells"] = f"unreadable transcripts: {exc}"
         return
-    if "_etype" not in df.columns or "cell_id" not in df.columns:
+    if "_etype" not in df.columns:
         row.notes["n_whole_cells"] = "no _etype column in TRACER output"
         return
+    # tracer_id is unique per entity; cell_id is the parent cell a fragment
+    # came from, so using it makes whole and partial overlap.
+    idcol = next((c for c in ("tracer_id", "cell_id") if c in df.columns), None)
+    if idcol is None:
+        row.notes["n_whole_cells"] = "no entity id column in TRACER output"
+        return
     et = df["_etype"].astype(str)
-    cid = df["cell_id"].astype(str)
+    cid = df[idcol].astype(str)
     whole, part = cid[et == "cell"], cid[et == "partial"]
     n_whole, n_part = whole.nunique(), part.nunique()
     row.set("n_whole_cells", int(n_whole))
