@@ -236,7 +236,7 @@ Two attempts were made and neither produced a usable panel:
 | attempt | settings | outcome |
 |---|---|---|
 | 1 | `sparse_pairs`, min-cells 300, min-expected 30 | **TIMEOUT** at 2 h on 42.9 M candidate pairs |
-| 2 | tighter floors (600 / 60), 12 h limit | ran > 11 h; still in the bootstrap |
+| 2 | tighter floors (600 / 60), 12 h limit | **TIMEOUT** at the 12 h wall, still in the bootstrap |
 
 Even had it finished, the builder regression documented above means it would
 have carried `bootstrap_reps_used = 0` and no `pos` pairs, exactly as all
