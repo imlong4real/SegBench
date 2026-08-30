@@ -226,6 +226,41 @@ a real run against real data.
 Segger is absent from the comparison table rather than present with fabricated
 values. See `reproducibility/segger_env_notes.md` for the five-failure chain.
 
+---
+
+## Kidney: derived cPMI could not be produced
+
+The benchmark asks for a panel-matched cPMI derived from the kidney reference.
+Two attempts were made and neither produced a usable panel:
+
+| attempt | settings | outcome |
+|---|---|---|
+| 1 | `sparse_pairs`, min-cells 300, min-expected 30 | **TIMEOUT** at 2 h on 42.9 M candidate pairs |
+| 2 | tighter floors (600 / 60), 12 h limit | ran > 11 h; still in the bootstrap |
+
+Even had it finished, the builder regression documented above means it would
+have carried `bootstrap_reps_used = 0` and no `pos` pairs, exactly as all
+three NSCLC attempts did — i.e. unusable for Mid-QC.
+
+**What the kidney TRACER runs used instead.** TRACER's own validated panel
+(`kidney_visiumhd_npmi.csv.gz`: 251,659 pairs over 1,656 genes, 133,067 `pos`,
+median 50 bootstrap reps). That panel *is* panel-matched — it was built
+against the VisiumHD feature space — it simply predates the regression.
+
+This is recorded rather than papered over: the kidney rows are real TRACER
+runs against a real panel-matched cPMI, but not one derived in this session.
+
+## RCTD on the kidney reference
+
+spacexr rejects a cell-type name containing `/`, and the kidney reference has
+`FIB/VSMC/P`. TRACER ships an identical reference with sanitised names
+(`kidney_ref_noschwann_rctd.h5ad`, `FIB_VSMC_P`), which the config now uses for
+both the cell-type universe and RCTD so `kept_types` matches what RCTD scored.
+
+Sanity check on the result: bin2cell's kidney RCTD scores 90,850 cells with PT
+(proximal tubule) dominant at 49,168 — the expected majority population in
+kidney cortex, which is a reasonable indication the label transfer is behaving.
+
 ## 3. Environments installed
 
 Built under `$SEGBENCH_ENV_ROOT` (`/scratch4/adeshpa6/segbench_envs`) and wired
