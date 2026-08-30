@@ -282,8 +282,15 @@ def cmd_evaluate(args: argparse.Namespace) -> int:
                                         "outputs/profile_by_gene.h5ad")
                           for q in sorted(d.glob(pat))), None)
         rscript = envs.resolve("split", "rscript") or envs.resolve("celladmix", "rscript")
-        if args.skip_rctd:
-            row.na("rctd_entropy_median", "skipped (--skip-rctd)")
+        # --skip-rctd suppresses *launching* RCTD, but a cached per-cell table
+        # from an earlier pass is still a real result and must not be thrown
+        # away — otherwise re-running the report after an allocation ran out
+        # would silently drop metrics that had already been computed.
+        _cached = (d / "rctd" / "rctd_cell_assignments_post.tsv").exists()
+        if args.skip_rctd and not _cached:
+            for _k in ("rctd_entropy_median", "kendall_tau_median",
+                       "marker_logfc_median"):
+                row.na(_k, "RCTD not run (--skip-rctd, no cached result)")
         elif not (ref and ct_col and cell_h5ad and rscript):
             missing = ("no cell_by_gene.h5ad" if not cell_h5ad else
                        "no Rscript configured" if not rscript else
@@ -295,7 +302,9 @@ def cmd_evaluate(args: argparse.Namespace) -> int:
             rdir = d / "rctd"
             per_cell = rdir / "rctd_cell_assignments_post.tsv"
             prep_json = rdir / "rctd_input_info.json"
-            if not per_cell.exists():
+            if not per_cell.exists() and args.skip_rctd:
+                pass  # nothing cached and launching was suppressed
+            elif not per_cell.exists():
                 print(f"    running RCTD for {row.method} ...")
                 # Normalise the matrix first: RCTD needs float64 integers, and
                 # method outputs violate that in two different ways.

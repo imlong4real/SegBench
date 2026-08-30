@@ -261,6 +261,40 @@ Sanity check on the result: bin2cell's kidney RCTD scores 90,850 cells with PT
 (proximal tubule) dominant at 49,168 — the expected majority population in
 kidney cortex, which is a reasonable indication the label transfer is behaving.
 
+---
+
+## Why two kidney rows lack reference-based metrics
+
+`kidney_visiumhd / tracer` and `kidney_visiumhd / tracer_seq` have runtime,
+memory, entity and assignment figures but no RCTD entropy, max weight, Kendall
+or marker LFC. The reason is an exhausted compute allocation, not a failure of
+the method or the harness:
+
+- both SLURM accounts reached their lifetime caps —
+  `adeshpa6` **over** its 6,000,000 CPU-minute limit (6,003,393 used) and
+  `aszalay1` at 99.4 % of 60,000 (≈378 CPU-minutes left);
+- RCTD over 331,665 and 460,941 entities against a 15,198-cell reference needs
+  hours of CPU, which is far beyond that remainder.
+
+`bin2cell`'s kidney RCTD **did** complete before the budget ran out (90,850
+cells, entropy 0.688, max weight 0.755, Kendall 0.555, marker LFC 1.248), and
+those numbers are real.
+
+To finish the two remaining rows once budget is available:
+
+```bash
+segbench evaluate <runs>/kidney_visiumhd/methods --dataset kidney_visiumhd \
+  --outdir <runs>/kidney_visiumhd/summary --rctd-cores 8
+scripts/make_final_report.sh <runs>
+```
+
+Nothing else needs redoing: `--skip-rctd` now reuses any cached per-cell table
+rather than discarding it, so re-running the report never throws away metrics
+that were already computed.
+
+**The NSCLC dataset is unaffected** — all five methods there carry the complete
+metric set.
+
 ## 3. Environments installed
 
 Built under `$SEGBENCH_ENV_ROOT` (`/scratch4/adeshpa6/segbench_envs`) and wired
