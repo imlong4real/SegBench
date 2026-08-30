@@ -64,7 +64,8 @@ try:
     rp.comparison_figure(df, out / "segbench_comparison",
                          title="SegBench — all methods, both datasets")
     rp.runtime_memory_scatter(df, out / "segbench_cost")
-    rp.write_markdown_summary(df, out / "segbench_summary.md")
+    rp.write_markdown_summary(df, out / "segbench_summary.md",
+                              dataset="all methods, both datasets")
     print(f"Wrote plots + markdown into {out}")
 except Exception as exc:
     print(f"(plots skipped: {exc})")
