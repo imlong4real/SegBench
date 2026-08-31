@@ -40,6 +40,20 @@ METRIC_PANELS = [
 ]
 
 
+def method_labels(names) -> list[str]:
+    """Display names for methods, falling back to the key when unregistered.
+
+    ``method`` stays the stable key used for joins and directory names; only
+    what a reader sees changes here.
+    """
+    from . import registry
+    out = []
+    for n in names:
+        spec = registry.METHODS.get(str(n))
+        out.append(spec.label if spec is not None else str(n))
+    return out
+
+
 def _method_colors(methods: list[str]) -> dict[str, str]:
     return {m: PALETTE[i % len(PALETTE)] for i, m in enumerate(sorted(methods))}
 
@@ -56,7 +70,7 @@ def comparison_figure(df: pd.DataFrame, out_path: Path, *,
     if not panels:
         raise SystemExit("No plottable metrics in the evaluation table.")
 
-    methods = df["method"].astype(str).tolist()
+    methods = method_labels(df["method"].astype(str).tolist())
     colors = _method_colors(methods)
     ncol = 3
     nrow = int(np.ceil(len(panels) / ncol))
@@ -116,12 +130,14 @@ def runtime_memory_scatter(df: pd.DataFrame, out_path: Path) -> Path | None:
     if sub.empty:
         return None
     colors = _method_colors(df["method"].astype(str).tolist())
+    _LBL = dict(zip(df["method"].astype(str),
+                    method_labels(df["method"].astype(str))))
     fig, ax = plt.subplots(figsize=(6.4, 5.0))
     for _, r in sub.iterrows():
         ax.scatter(r["runtime_method_s"] / 60.0, r["peak_rss_gb"], s=130,
                    color=colors[str(r["method"])], edgecolor="black",
                    linewidth=0.7, zorder=3)
-        ax.annotate(str(r["method"]),
+        ax.annotate(_LBL.get(str(r["method"]), str(r["method"])),
                     (r["runtime_method_s"] / 60.0, r["peak_rss_gb"]),
                     textcoords="offset points", xytext=(7, 5), fontsize=9)
     ax.set_xlabel("Method runtime (min)")
@@ -174,14 +190,20 @@ def write_markdown_summary(df: pd.DataFrame, out_path: Path, *,
     # column they are indistinguishable, so carry it whenever it varies.
     multi_ds = "dataset" in df.columns and df["dataset"].nunique() > 1
     def _label(r) -> str:
-        return f"{r['dataset']} / {r['method']}" if multi_ds else str(r["method"])
+        lab = method_labels([r["method"]])[0]
+        return f"{r['dataset']} / {lab}" if multi_ds else lab
     show = [c for c in (("dataset",) if multi_ds else ()) +
                        ("method", "entity_kind", "runtime_method_s", "peak_rss_gb",
                         "n_entities", "mean_transcripts_per_profile", "frac_assigned",
                         "rctd_entropy_median", "rctd_max_weight_median",
                         "kendall_tau_median", "marker_logfc_median",
                         "cpmi_purity", "cpmi_conflict") if c in df.columns]
-    lines += [_markdown_table(df[show]), ""]
+    # Print display labels in the table while `method` stays the join key
+    # everywhere else (CSV, directory names, CLI arguments).
+    shown = df[show].copy()
+    if "method" in shown.columns:
+        shown["method"] = method_labels(shown["method"].astype(str))
+    lines += [_markdown_table(shown), ""]
 
     if min_reference_cells is not None:
         lines += [f"Reference cell types with < {min_reference_cells} cells were "

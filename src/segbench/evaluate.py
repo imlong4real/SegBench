@@ -303,6 +303,47 @@ def prepare_counts_for_rctd(src: Path, dest: Path, *, log=None) -> dict:
             "rctd_input_h5ad": str(dest)}
 
 
+def panel_restricted_reference(reference_h5ad: Path, panel, cache_dir: Path) -> Path:
+    """Write (once) a copy of the reference holding only the panel genes.
+
+    The R side restricts genes too, but only *after* ``read_h5ad`` has pulled
+    the whole matrix into memory -- which is what exhausts the address space on
+    a whole-transcriptome reference before RCTD starts. Handing R a file that
+    is already narrow moves that cost to a single cached step.
+
+    Returns the original path unchanged if nothing would be gained.
+    """
+    import anndata as ad
+    import hashlib
+
+    genes = tuple(sorted(set(map(str, panel))))
+    if not genes:
+        return Path(reference_h5ad)
+    key = hashlib.sha1(("|".join(genes)).encode()).hexdigest()[:12]
+    cache_dir = Path(cache_dir)
+    dest = cache_dir / f"ref_panel_{key}.h5ad"
+    if dest.exists():
+        return dest
+
+    backed = ad.read_h5ad(reference_h5ad, backed="r")
+    wanted = set(genes)
+    shared = [g for g in map(str, backed.var_names) if g in wanted]
+    if len(shared) >= 0.9 * backed.shape[1]:
+        try:
+            backed.file.close()
+        except Exception:
+            pass
+        return Path(reference_h5ad)     # already narrow; copying buys nothing
+    sub = backed[:, shared].to_memory()
+    try:
+        backed.file.close()
+    except Exception:
+        pass
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    sub.write_h5ad(dest)
+    return dest
+
+
 def run_rctd(*, cell_h5ad: Path, reference_h5ad: Path, celltype_col: str,
              outdir: Path, rscript: str, exclude_celltypes: list[str],
              cores: int = 4, reference_min_umi: int = 100,

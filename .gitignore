@@ -24,6 +24,20 @@
 /out/
 NMF_*/
 
+# --- Generated reports & run summaries ----------------------------------
+# Written into run directories by the wrappers and the report step. Docs and
+# READMEs are re-included at the bottom; these are per-run artifacts.
+run_summary.md
+comparison.md
+comparison_table.csv
+segbench_summary.md
+segbench_summary.csv
+benchmark_stats.tsv
+schema_validation_report.json
+/final_report/
+**/summary/
+**/rctd/
+
 # --- Logs ---------------------------------------------------------------
 /logs/
 *.log
@@ -43,10 +57,14 @@ scratch/
 .ipynb_checkpoints/
 
 # --- Environments & containers ------------------------------------------
+# Built images are large binaries and are never tracked; the recipes that
+# build them are source and are re-included at the bottom of this file.
 /containers/
 *.sif
 *.sqsh
 *.simg
+*.tar
+*.tar.gz
 .conda/
 conda-env/
 venv/
@@ -101,6 +119,15 @@ configs/local/
 # re-include __pycache__, configs/local/ and renv/library/.
 # =============================================================================
 !.gitignore
+# Container recipes and build scripts are source, even though the images and
+# the directory holding them are not.
+!containers/
+!containers/**/*.def
+!containers/**/Dockerfile*
+!containers/**/*.dockerfile
+!containers/**/*.md
+!containers/**/*.sh
+!containers/**/*.sha256
 !docs/**/*.md
 !docs/**/*.txt
 !configs/**/*.yaml

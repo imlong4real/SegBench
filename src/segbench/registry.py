@@ -33,9 +33,18 @@ class MethodSpec:
     #: Whether the method emits a per-transcript assignment table. SPLIT does
     #: not (it returns fractional expected counts), so it is scored per cell.
     transcript_level: bool = True
+    #: Human-facing name for tables and plots. The ``name`` stays the stable
+    #: key used by CLI arguments, directory names and joins; this is only what
+    #: a reader sees. Empty means "use ``name``".
+    display_name: str = ""
     #: Default config file, relative to ``configs/``.
     default_config: str = ""
     tags: tuple[str, ...] = field(default_factory=tuple)
+
+    @property
+    def label(self) -> str:
+        """What to print for this method."""
+        return self.display_name or self.name
 
     def load(self) -> ModuleType:
         """Import the wrapper module (deferred: heavy deps stay unimported)."""
@@ -79,6 +88,7 @@ METHODS: dict[str, MethodSpec] = {
         name="tracer", module="tracer", modality=IMAGING, kind="refinement",
         summary="cPMI-guided transcript reassignment / resegmentation.",
         external_deps=("tracer (python package)",),
+        display_name="TRACER (Seg)",   # refines an existing segmentation
         default_config="methods/tracer.yaml", tags=("cleanup",),
     ),
     # --- sequencing / array-based ----------------------------------------
@@ -94,6 +104,7 @@ METHODS: dict[str, MethodSpec] = {
         kind="refinement", entity_kind="bin",
         summary="TRACER refinement applied to binned sequencing data.",
         external_deps=("tracer (python package)",),
+        display_name="TRACER (No-seg)",   # builds profiles without a segmentation
         default_config="methods/tracer_seq.yaml", tags=("cleanup", "visium-hd"),
     ),
 }
