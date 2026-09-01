@@ -159,16 +159,28 @@ made independent cohort:
 The two halves share no study, so Validation is genuinely external *to the RCTD
 reference*. But it is not external to TRACER.
 
-**TRACER's cPMI panel is built from GSE127465.** From the panel's own build
-receipt (`results/reference_npmi/npmi_build_summary.json`):
+**Correction.** An earlier version of this section asserted that TRACER's cPMI
+panel comes from GSE127465, citing
+`results/reference_npmi/npmi_build_summary.json`. That receipt is real, but it
+describes a panel the benchmark never loaded. The run log is the authority, and
+it names a different file -- see section 8. The panel actually used was built
+from **`lung_cancer_50k.h5ad`, all 50,000 cells**, which is the same object
+RCTD evaluates against and SPLIT purifies against.
 
-    --reference-h5ad datasets/lung_cancer_scrna_GSE127465/processed/h5ad/
-                     lung_scrna_GSE127465_harmonized.h5ad
+The consequence is worse, not better. That 50,000-cell object is
+`Reference` (43,606) **plus** `Validation` (6,394) -- so the panel saw every
+cell in the held-out split, GSE119911's 1,175 included. There is no slice of
+this reference that TRACER's panel did not see.
 
-and GSE127465 supplies **81.6%** of the Validation cells. Scoring TRACER
-against Validation would be scoring it largely against the cohort its own gene
-pair statistics came from -- the same circularity SPLIT has with the full
-reference, just via a different route.
+| method | information source, as actually run | disjoint from the evaluation reference? |
+|---|---|---|
+| SPLIT | the full 50k reference, via RCTD | no |
+| TRACER | a cPMI panel built from the full 50k reference | no |
+| baseline_10x | none | n/a |
+
+So **both** methods are circular with respect to the evaluation reference, by
+two different routes, and the held-out construction below cannot rescue either
+of them.
 
 So the two methods are entangled with *different* slices of the reference:
 
@@ -178,8 +190,10 @@ So the two methods are entangled with *different* slices of the reference:
 | TRACER | a cPMI panel built from GSE127465 | GSE127465 |
 | baseline_10x | nothing | -- |
 
-The only cohort disjoint from **both** is **GSE119911**, at 1,175 cells -- and
-it is too thin to carry the full comparison. Its composition, against the
+No cohort in this reference is disjoint from both, because the panel was built
+from all of it. The nearest thing, **GSE119911** at 1,175 cells, is inside the
+50k object and so was seen by the panel; it is reported below only to show that
+even setting that aside, it is too thin to carry the comparison. Its composition, against the
 50-cell minimum the pipeline already applies:
 
 | cell type | GSE119911 | >= 50? |
@@ -437,3 +451,68 @@ Practical consequences:
 3. Anything else in this project that rebuilds a panel is affected the same
    way. That includes the `kidney_visiumhd` reference panel if it is ever
    regenerated.
+
+---
+
+## 8. The panel the NSCLC benchmark actually used
+
+The TRACER row of the NSCLC Xenium benchmark was produced with a cPMI panel
+that contains **no confidently signed gene pair at all**. This is the single
+most important caveat in this document.
+
+### What was used
+
+| | |
+|---|---|
+| absolute path | `/scratch4/adeshpa6/segbench_runs/nsclc_xenium/reference/nsclc_pmi.csv.gz` |
+| filename | `nsclc_pmi.csv.gz` |
+| SHA-256 (file) | `5a6bc4db1adbd717754e6f3ef8ab728d7bb955731404a24155a0d3231f8090f3` |
+| SHA-256 (uncompressed) | `41b0e1c8e931ef107acec36e8b147bb85aaeb52e96de1248fdfd3bbca704c728` |
+| built | 2026-08-29 12:51 |
+| source reference | `TRACER/datasets/dataset/lung_cancer_scrna_10x/lung_cancer_50k.h5ad`, all 50,000 cells |
+| builder | `TRACER/scripts/build_pmi_from_scrna.py`, `--mode all_pairs` |
+| rows | 6,370 (5,196 carrying an NPMI value) |
+| classes present | `low_evidence` 5,185, `indeterminate` 1,174, `neg_one` 11 |
+| classes absent | **`pos` 0, `neg` 0** |
+| pairs above TRACER's `pmi_threshold=0.2` | **184** |
+
+Source provenance is confirmed from the file's own contents, not from a
+neighbouring receipt: `n_cells_i / p_i` equals **50,000** on every one of the
+6,370 rows.
+
+### How this was missed, and how it was caught
+
+`config_receipt.json` records the command line, which carried
+`--pmi .../TRACER/results/reference_npmi/lung_cancer_npmi.csv.gz` -- the
+healthy 44,850-row GSE127465 panel. **The run did not load that file.**
+`run.log` records what was actually opened:
+
+    Loading NPMI panel: .../nsclc_xenium/reference/nsclc_pmi.csv.gz
+    NPMI panel: 12740 rows after symmetric expansion
+
+12,740 = 2 x 6,370. The dataset-scoped panel silently took precedence over the
+CLI argument, so the receipt and the run disagree. **Trust `run.log` over
+`config_receipt.json` for this pipeline** until that precedence is fixed.
+
+It was caught by rebuilding a panel from the 50k reference during the section-6
+work and finding the rebuild **byte-identical** to the one the benchmark had
+used: both uncompress to `41b0e1c8e931ef107acec36e8b147bb85aaeb52e96de1248fdfd3bbca704c728`.
+The panel in the benchmark is the output of the regressed builder described in
+section 7.
+
+### What it means for the results
+
+TRACER ran with **184 usable gene pairs** where a healthy panel supplies on the
+order of 29,000. Every TRACER number for `nsclc_xenium` in this repository --
+the entropy of 0.5270 on matched cells, the reference-free VSI of 0.6470, the
+runtime, the cell counts -- describes TRACER operating on an essentially
+information-free panel.
+
+**These are not measurements of TRACER as intended.** They are a lower bound at
+best, and they should not be cited as TRACER's performance. The comparison
+against SPLIT in sections 2 and 7 is affected accordingly: TRACER was not
+merely differently-informed than SPLIT, it was barely informed at all.
+
+Re-running TRACER on a correct panel requires fixing the builder first
+(section 7). Until then the TRACER row stands as provisional, and is marked as
+such wherever it appears.
