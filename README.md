@@ -1,382 +1,152 @@
-# segmentation_benchmark_pipeline
+<p align="center">
+  <img src="asset/segbench_logo.png" alt="SegBench" width="360">
+</p>
 
-A reproducible benchmarking suite for spatial-transcriptomics **segmentation**
-and **transcript-refinement** methods.
+<h1 align="center">SegBench</h1>
+<p align="center"><b>A reproducible benchmark for cell segmentation and profile refinement in spatial transcriptomics</b></p>
 
-Every method runs through one interface and produces one output contract, so
-runtime, peak memory, cell counts and transcript assignment are directly
-comparable across tools:
+<!-- badges: start -->
+<p align="center">
 
-```bash
-segbench run proseg --dataset tsu20_xenium --outdir benchmark_output/tsu20/proseg
-segbench suite imaging_full --dataset tsu20_xenium
-```
+[![Python](https://img.shields.io/badge/python-3.11-blue)](https://www.python.org/)
+[![Methods](https://img.shields.io/badge/methods-8-green)](docs/methods.md)
+[![Platforms](https://img.shields.io/badge/platforms-Xenium%20%7C%20VisiumHD-orange)](docs/methods.md)
+[![Self-test](https://img.shields.io/badge/self--test-segbench%20selftest-informational)](tests/)
 
-| modality | methods |
-|---|---|
-| **Imaging** (molecule-resolved: Xenium, CosMx, MERFISH) | Baysor, ProSeg, Segger, SPLIT, CellAdmix, TRACER |
-| **Sequencing** (array / binned: Visium HD) | Bin2Cell, TRACER |
+</p>
+<!-- badges: end -->
+
+SegBench runs cell segmentation and profile-refinement methods on the same
+spatial transcriptomics data, under one input contract and one metric suite, so
+their outputs can actually be compared.
+
+---
+
+## Supported methods
+
+**Imaging / molecule-resolved (Xenium, MERFISH, CosMx)**
+
+| Method | Kind | Entity |
+|---|---|---|
+| [Baysor](https://github.com/kharchenkolab/Baysor) | segmentation | cell |
+| [ProSeg](https://github.com/dcjones/proseg) | segmentation | cell |
+| [Segger](https://github.com/dpeerlab/segger) ¹ | segmentation | cell |
+| [SPLIT](https://github.com/kharchenkolab/SPLIT) | refinement | cell |
+| [CellAdmix](https://github.com/kharchenkolab/celladmix) | refinement | cell |
+| [TRACER (Seg)](https://github.com/imlong4real/TRACER) | refinement | cell |
+
+¹ Registered and wired, but not yet completed on this cluster — see
+[docs/comparison_audit.md](docs/comparison_audit.md).
+
+**Sequencing / array-based (Visium HD)**
+
+| Method | Kind | Entity |
+|---|---|---|
+| [Bin2Cell](https://github.com/Teichlab/bin2cell) | cell-calling | cell |
+| [TRACER (Seg)](https://github.com/imlong4real/TRACER) | refinement | cell |
+| [TRACER (No-seg)](https://github.com/imlong4real/TRACER) | refinement | bin |
 
 ---
 
 ## Install
 
-The suite itself is pure Python and needs no installation — `bin/segbench`
-puts `src/` on `PYTHONPATH` and runs.
+SegBench runs from a clone; no `pip install` required.
 
 ```bash
 git clone https://github.com/imlong4real/segmentation_benchmark_pipeline.git
 cd segmentation_benchmark_pipeline
-
-# Core dependencies (Python >= 3.10)
-pip install numpy pandas pyarrow psutil pyyaml anndata scipy scanpy
-
-# Check the wiring — no external tool required
-./bin/segbench selftest
-
-# Optional: put segbench on PATH
-export PATH="$PWD/bin:$PATH"
-```
-
-Point `SEGBENCH_DATA` at wherever your datasets live so configs stay portable:
-
-```bash
-export SEGBENCH_DATA=/scratch/$USER/spatial_data
-```
-
-### Method environments
-
-Build everything in one pass (run it on a compute node — conda solves are
-memory-hungry and a login-node cgroup will OOM-kill them):
-
-```bash
-sbatch --mem=48G --cpus-per-task=8 --time=06:00:00 \
-  --wrap="scripts/setup_environments.sh /scratch/$USER/segbench_envs"
-```
-
-Then point SegBench at the result and check what is ready:
-
-```bash
-export SEGBENCH_ENV_ROOT=/scratch/$USER/segbench_envs
-export TRACER_VENV=/path/to/TRACER/.venv
-./bin/segbench doctor
-```
-
-
-Methods need genuinely different runtimes (a Julia binary, a Rust binary, R, a
-CUDA Python). `configs/environments.yaml` declares one per method and is the
-only file naming machine-specific paths; everything resolves through `${VAR}`:
-
-```bash
 cp configs/environments.local.example.sh configs/environments.local.sh
-$EDITOR configs/environments.local.sh     # set SEGBENCH_ENV_ROOT, TRACER_VENV
+# edit configs/environments.local.sh to point at your interpreters and data
 source configs/environments.local.sh
 ```
 
-`segbench run <method>` then **re-execs into that method's own interpreter**,
-so nothing needs activating by hand. Install only the methods you want, then
-ask which are ready:
+Each method lives in its own environment, declared in
+[`configs/environments.yaml`](configs/environments.yaml). Build them with:
+
+```bash
+scripts/setup_environments.sh
+```
+
+Check what resolves on your machine, and what the suite would do:
 
 ```bash
 segbench doctor
+segbench selftest
 ```
 
-```
-baysor       NOT READY
-             missing binary:baysor
-             needs   baysor >= 0.7 (Julia binary)
-proseg       READY
+---
+
+## Run
+
+Xenium — one method, then the whole imaging suite:
+
+```bash
+segbench run tracer --dataset nsclc_xenium --outdir runs/nsclc/tracer
 ```
 
-| method | install |
+```bash
+segbench suite imaging --dataset nsclc_xenium --outdir runs/nsclc
+```
+
+Visium HD:
+
+```bash
+segbench suite sequencing --dataset kidney_visiumhd --outdir runs/kidney
+```
+
+Score the runs and build the comparison table:
+
+```bash
+segbench evaluate --outdir runs/nsclc && segbench report --outdir runs/nsclc
+```
+
+---
+
+## Outputs and metrics
+
+Every method writes the same layout, whatever it produced internally:
+
+```
+<outdir>/<method>/
+├── outputs/                  standardized cell-by-gene h5ad + transcripts parquet
+├── benchmark_stats.json      runtime, peak RSS, entity counts
+├── config_receipt.json       resolved args, input digests, versions, git commit
+└── run.log                   one file per run
+```
+
+Scored per method:
+
+| Group | Metrics |
 |---|---|
-| baysor | `julia -e 'using Pkg; Pkg.add(PackageSpec(url="https://github.com/kharchenkolab/Baysor.git", rev="v0.7.0")); Pkg.build("Baysor")'` |
-| proseg | `cargo install proseg --version 3.0.10 --locked` |
-| segger | container (`reproducibility/segger/segger.def`) or pip + torch-geometric with CUDA |
-| split, celladmix | R ≥ 4.3, then `Rscript workflow/scripts/_count_correction/install_split_celladmix_deps.R` |
-| tracer | the TRACER python package |
-| bin2cell | `pip install bin2cell` (+ `stardist`/`tensorflow`, or pass `--labels-npz`) |
+| Cost | runtime (method only), peak RSS |
+| Output | entities produced, mean transcripts per profile, fraction of transcripts assigned |
+| Reference concordance | RCTD entropy, RCTD max weight, Kendall tau vs scRNA, marker specificity log2FC |
+| Reference-free | ovrlpy vertical signal integrity |
+| Coherence | cPMI conflict |
 
-Container definitions for a reproducible Linux/Apptainer setup live in
-`reproducibility/*.def`.
+Reference-concordance metrics are scored against an scRNA reference; where a
+method also *optimises* against that reference, the metric measures agreement
+with it rather than segmentation quality. See the audit before ranking anything
+on them.
 
----
-
-## Input schema
-
-Imaging methods consume a **standardized transcripts parquet** — one row per
-molecule:
-
-| column | type | required | meaning |
-|---|---|:--:|---|
-| `x`, `y` | float | ✓ | spatial coordinates |
-| `feature_name` | str | ✓ | gene / target name |
-| `cell_id` | str | ✓ | current assignment, or `UNASSIGNED` |
-| `z` | float | | axial coordinate |
-| `transcript_id` | int/str | | stable id |
-| `qv` | float | | vendor quality value |
-| `overlaps_nucleus` | 0/1 | | molecule falls inside a nucleus |
-
-`x_location`/`y_location`/`gene` are accepted and renamed automatically.
-
-Build one from a raw Xenium bundle:
-
-```bash
-python workflow/scripts/_benchmark/standardize_method_output.py \
-  --method xenium_default --xenium-dir <bundle> --out-dir <dir>
-```
-
-**Segger** additionally wants the raw Xenium bundle (`--xenium-dir`) for real
-nucleus boundaries. **Bin2Cell** takes a Visium HD 2 µm bin matrix
-(`--input-h5ad`) plus the H&E image instead of a transcript table. Details in
-[docs/methods.md](docs/methods.md).
+TRACER's cPMI panels are consumed, not built, by SegBench. The upstream panel
+builder currently has a defect that produces an unusable panel without erroring
+— regenerate a panel only after checking
+[docs/comparison_audit.md](docs/comparison_audit.md).
 
 ---
 
-## Running
+## Documentation
 
-### One method
+| | |
+|---|---|
+| [docs/methods.md](docs/methods.md) | per-method inputs, invocation, and output contract |
+| [docs/adding_a_method.md](docs/adding_a_method.md) | adding a method to the registry |
+| [docs/comparison_audit.md](docs/comparison_audit.md) | **benchmark caveats, selection effects, reference circularity, known-bad tooling** |
+| [docs/audit.md](docs/audit.md) | repository and pipeline hygiene audit |
+| [reproducibility/](reproducibility/) | container recipes, environment locks, checksums |
 
-```bash
-segbench run baysor \
-  --transcripts data/TSU-20/filtered_df_standardized.parquet \
-  --outdir benchmark_output/tsu20/baysor \
-  --sample-name TSU20 --threads 8 --overwrite
-```
-
-Or drive it from a dataset config so the paths live in one place:
-
-```bash
-segbench run baysor --dataset tsu20_xenium --outdir benchmark_output/tsu20/baysor
-```
-
-Per-method commands and flags: [docs/methods.md](docs/methods.md), or
-`segbench run <method> --help`.
-
-### The whole suite
-
-```bash
-segbench suite imaging_full     --dataset tsu20_xenium
-segbench suite sequencing_full  --dataset visium_hd_demo
-segbench suite smoke            --dataset tsu20_xenium   # 50k-transcript subsample
-```
-
-Methods whose tools are not installed are **skipped**, not failed, and a
-failing method does not abort the rest — a partial benchmark is more useful
-than none. The suite writes `benchmark_summary.tsv` and `suite_result.json`
-into the output root.
-
-### Scoring and comparing
-
-> **Run scoring on a compute node.** `segbench evaluate` loads the scRNA
-> reference and each method's cell-by-gene matrix, and RCTD is memory-hungry.
-> On a cluster with a per-user memory cgroup this is silently OOM-killed on the
-> login node (exit 137, no traceback). Use:
->
-> ```bash
-> sbatch --cpus-per-task=8 --mem=128G --time=04:00:00 \
->   --wrap="./bin/segbench evaluate <runs>/<dataset>/methods --dataset <dataset> \
->           --outdir <runs>/<dataset>/summary --rctd-cores 8"
-> ```
-
-
-`collect` stacks the per-run stats; `evaluate` additionally computes the
-cross-method biological metrics and draws the comparison figures:
-
-```bash
-segbench evaluate /scratch4/$USER/segbench_runs/nsclc_xenium/methods \
-  --dataset nsclc_xenium --min-reference-cells 50
-```
-
-writes `comparison_table.csv`, `comparison.{png,pdf}`, `cost_scatter.{png,pdf}`
-and `comparison.md`. Metric definitions are held identical across methods by
-routing every method through the same code (RCTD via `run_rctd.R`, Kendall and
-marker log2FC via `get_metric.py`). Quantities that genuinely differ in meaning
-are reported as `n/a` with a reason rather than coerced — see
-[docs/audit.md](docs/audit.md#5-metric-comparability).
-
-`--min-reference-cells` drops sparsely-represented reference cell types from
-RCTD and the marker/Kendall metrics so rare populations cannot dominate a
-median.
-
-### The full deliverable
-
-One command scores every method on both datasets and emits the unified
-summary CSV, the comparison plots and a markdown table:
-
-```bash
-scripts/make_final_report.sh
-```
-
-The runs root comes from `$SEGBENCH_RUNS` (set it in
-`configs/environments.local.sh`), or pass it as the first argument:
-
-```bash
-scripts/make_final_report.sh /path/to/segbench_runs
-```
-
-It writes `final_report/segbench_summary.csv`, `segbench_comparison.png/pdf`,
-`segbench_cost.png/pdf` and `segbench_summary.md`. The `*_note` columns travel
-with the CSV so the non-comparable markers survive export.
-
-Scoring re-uses any RCTD result already on disk. To rebuild the report without
-launching RCTD at all -- useful when compute budget is short, since RCTD is by
-far the most expensive step -- set `EVAL_EXTRA=--skip-rctd`; cached per-cell
-tables are still read, and only methods with nothing cached are marked `n/a`.
-
-### Aggregating
-
-```bash
-segbench collect benchmark_output/tsu20 --out summary.tsv
-```
-
-```
-method status  total_seconds  method_seconds  peak_rss_gb  n_entities  n_transcripts_assigned  frac_assigned
-proseg     ok       1.906432        0.708646     0.035896         282                   16159        0.80795
-baysor     ok      41.203100       38.902000     2.140000         311                   17402        0.87010
-```
-
-### Other commands
-
-```bash
-segbench list [-v]        # methods, and whether they can run here
-segbench doctor [method]  # resolved env paths + dependency report (--json)
-segbench selftest         # dependency-free wiring check
-```
-
-### On a cluster
-
-```bash
-sbatch --export=ALL,METHOD=proseg,DATASET=nsclc_xenium,SEGBENCH_REPO=$PWD \
-       scripts/slurm/run_method.sbatch
-```
-
----
-
-## Configuration
-
-Four layers, lowest precedence first:
-
-1. `configs/methods/<method>.yaml` — method defaults
-2. `configs/datasets/<name>.yaml` — sample paths (`--dataset`)
-3. a user config (`--config`)
-4. explicit CLI flags
-
-Paths may be repo-relative or use `${SEGBENCH_DATA}` / any `${ENV_VAR}`, which
-is how machine-specific locations stay out of tracked files.
-
-```yaml
-# configs/datasets/tsu20_xenium.yaml
-dataset: {name: tsu20_xenium, platform: xenium, modality: imaging}
-sample_name: TSU20
-inputs:
-  transcripts:    ${SEGBENCH_DATA}/lung_cancer_xenium_10x/TSU-20/filtered_df_standardized.parquet
-  xenium_dir:     ${SEGBENCH_DATA}/lung_cancer_xenium_10x/TSU-20
-  reference_h5ad: ${SEGBENCH_DATA}/lung_cancer_scrna_10x/lung_cancer_scrna_split.h5ad
-```
-
-The dataset configs in this repo are **templates** — copy one and point it at
-your data.
-
----
-
-## Output schema
-
-Every run writes the same layout:
-
-```
-<outdir>/
-├── outputs/
-│   ├── <method>_transcripts_standardized.parquet   the refined assignment
-│   ├── <method>_cell_by_gene.h5ad                  cells x genes counts
-│   └── <method>_raw_output/                        the tool's native output
-├── benchmark_stats.json      comparable performance statistics
-├── benchmark_stats.tsv       the same, flattened to one row
-├── schema_validation_report.json
-├── runtime_memory.json  runtime_by_stage.tsv  external_time.txt
-├── config_receipt.json       exact args, input hashes, versions, git commit
-├── run_summary.md
-└── run.log
-```
-
-`benchmark_stats.json` carries runtime (total **and** the external tool alone),
-peak RSS (with `source` recording how it was measured), entity counts,
-assigned/unassigned transcripts, and method-relevant QC.
-
-**Compare `runtime.method_seconds`, not `total_seconds`** — the total includes
-format conversion that differs per method. Full field-by-field reference:
-[docs/output_schema.md](docs/output_schema.md).
-
-Two methods deviate deliberately: **SPLIT** is cell-level (fractional expected
-counts make per-molecule attribution unrecoverable) and **Bin2Cell** reports
-2 µm *bins* rather than transcripts. Both are flagged in the stats via
-`entity_kind` and `qc.transcript_level`.
-
----
-
-## Adding another method
-
-Two files: a wrapper module and one registry entry. The CLI, suite runner,
-`doctor` and aggregator all read the registry, so nothing else changes.
-
-See [docs/adding_a_method.md](docs/adding_a_method.md) for the skeleton and the
-five rules that keep a new method comparable with the existing ones.
-
----
-
-## Repository layout
-
-```
-bin/segbench                 one-command entry point (no install needed)
-src/segbench/
-├── cli.py                   run / suite / list / doctor / collect / selftest
-├── registry.py              the method registry — the only place methods are declared
-├── common.py                shared runner library: staging, timing, peak RSS,
-│                            standardization, schema validation, provenance
-├── stats.py                 the benchmark_stats.json contract + aggregation
-├── config.py                layered YAML config + ${ENV} path resolution
-└── methods/                 one wrapper per method
-    ├── baysor.py  proseg.py  segger.py  split.py
-    ├── celladmix.py  tracer.py  bin2cell.py
-    └── _base.py             shared CLI flags + config resolution
-
-configs/
-├── methods/                 per-method defaults
-├── datasets/                per-sample input paths (templates)
-└── suites/                  which methods a suite runs
-
-docs/                        method reference, output schema, HPC notes
-tests/                       dependency-free smoke test + fixture generator
-reproducibility/             Apptainer/Singularity defs, conda env, renv lock
-scripts/slurm/               SLURM job scripts for GPU Segger runs
-workflow/                    Snakemake pipeline + metrics/figure scripts
-├── Snakefile_benchmark      benchmark DAG
-├── rules/                   Snakemake rules
-└── scripts/
-    ├── get_metric.py                 transcript-level benchmark metrics
-    ├── get_cell_level_metric.py      cell-level metrics (use for SPLIT)
-    ├── _benchmark/                   standardization + metric collection
-    ├── _segmentation/                per-tool output adapters
-    └── _v2_*, _v3_*, _roi_*          publication figure / ROI analysis scripts
-benchmark_output/            run outputs (gitignored)
-```
-
-The `workflow/` Snakemake layer is the older pipeline and remains functional;
-`segbench` is the supported entry point for benchmarking. `get_metric.py`
-computes the downstream biological metrics (label transfer, reference
-consistency, marker specificity, cPMI coherence) on top of any method's
-standardized parquet.
-
----
-
-## Reproducibility
-
-Every run records the exact command, resolved arguments, input SHA-1 hashes,
-tool and package versions, hostname and git commit in `config_receipt.json`.
-Seeds are explicit (`--seed`, default 1). Container definitions for a pinned
-Linux environment are in `reproducibility/`.
-
-Known limitation: `memory.source` is `psutil_inprocess` rather than
-`external_time` for in-process (pure Python) methods, where there is no
-subprocess for `/usr/bin/time` to measure. Check that field before comparing
-memory across methods.
+**Read [docs/comparison_audit.md](docs/comparison_audit.md) before drawing
+conclusions from any comparison table.** It documents which metrics are
+independent of the evaluation reference and which are not, how many cells each
+method is actually scored on, and the current state of upstream tooling.

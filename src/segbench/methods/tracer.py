@@ -47,6 +47,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import datetime as dt
 import logging
 import os
 import resource
@@ -128,18 +129,35 @@ def build_argparser() -> argparse.ArgumentParser:
 # Logging
 # ---------------------------------------------------------------------------
 def setup_logging(outdir: Path) -> logging.Logger:
+    """One log per run.
+
+    ``run.log`` used to be opened in append mode with a time-only timestamp, so
+    a directory re-run three times held three interleaved runs and the reader
+    had no date to separate them. Reading the first "Loading NPMI panel" line
+    then attributes a superseded attempt's inputs to the surviving outputs.
+
+    ``run.log`` now describes exactly the run whose outputs are on disk;
+    previous attempts are preserved beside it as ``run_<timestamp>.log``.
+    """
     outdir.mkdir(parents=True, exist_ok=True)
     fmt = logging.Formatter(
         fmt="%(asctime)s %(levelname)-7s %(name)s :: %(message)s",
-        datefmt="%H:%M:%S",
+        datefmt="%Y-%m-%d %H:%M:%S",
     )
     log = logging.getLogger("run_tracer")
     log.setLevel(logging.INFO)
     log.propagate = False
     if log.handlers:
         return log
+
+    current = outdir / "run.log"
+    if current.exists() and current.stat().st_size:
+        stamp = dt.datetime.fromtimestamp(
+            current.stat().st_mtime).strftime("%Y%m%dT%H%M%S")
+        current.replace(outdir / f"run_{stamp}.log")
+
     sh = logging.StreamHandler(sys.stdout); sh.setFormatter(fmt)
-    fh = logging.FileHandler(outdir / "run.log", mode="a"); fh.setFormatter(fmt)
+    fh = logging.FileHandler(current, mode="w"); fh.setFormatter(fmt)
     log.addHandler(sh); log.addHandler(fh)
     return log
 
@@ -238,6 +256,23 @@ def load_transcripts(path: Path, log: logging.Logger) -> pd.DataFrame:
              len(df), df["feature_name"].nunique(),
              n_assigned, len(df) - n_assigned)
     return df
+
+
+def panel_fingerprint(path: Path) -> dict:
+    """Identify a cPMI panel file by content, not by the path asked for.
+
+    A run directory's log accumulates across attempts, so "which panel did this
+    run use" cannot be answered from a path alone. Recording the resolved path
+    with its digest in the receipt makes the answer unambiguous later.
+    """
+    import hashlib
+    p = Path(path).resolve()
+    h = hashlib.sha256()
+    with open(p, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            h.update(chunk)
+    return {"path": str(p), "sha256": h.hexdigest(),
+            "bytes": p.stat().st_size}
 
 
 def load_npmi_panel(path: Path, log: logging.Logger) -> pd.DataFrame:
@@ -522,7 +557,17 @@ def main(argv: list[str] | None = None, method: str | None = None) -> int:
     with timer.time("load_transcripts"):
         df = load_transcripts(args.transcripts, log)
     with timer.time("load_pmi"):
+        requested_pmi = Path(args.pmi).resolve() if args.pmi else None
         panel = load_npmi_panel(args.pmi, log)
+        panel_fp = panel_fingerprint(args.pmi)
+        log.info("NPMI panel sha256=%s (%s)", panel_fp["sha256"], panel_fp["path"])
+        if requested_pmi is not None and panel_fp["path"] != str(requested_pmi):
+            raise SystemExit(
+                "PMI panel mismatch: resolved configuration asked for\n"
+                f"  {requested_pmi}\n"
+                "but the file actually opened was\n"
+                f"  {panel_fp['path']}\n"
+                "Refusing to continue: the run would be unattributable.")
     with timer.time("run_method"):
         df_post, progression, cfg = run_tracer(
             df, panel,
@@ -557,7 +602,11 @@ def main(argv: list[str] | None = None, method: str | None = None) -> int:
         qc={"platform": args.platform,
             "pmi_threshold": args.pmi_threshold,
             "tau": args.tau,
-            "pmi_panel": str(args.pmi)},
+            "pmi_panel": str(args.pmi),
+            # What was actually opened, digest included: the requested path and
+            # the effective one must agree, and a later reader should not have
+            # to trust a log line to know which file this run consumed.
+            "pmi_panel_effective": panel_fp},
         outputs=[str(args.outdir / "outputs" / "transcripts_tracer_refined.parquet")],
         notes="NPMI-guided transcript refinement.")
 

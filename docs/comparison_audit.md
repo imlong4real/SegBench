@@ -159,28 +159,15 @@ made independent cohort:
 The two halves share no study, so Validation is genuinely external *to the RCTD
 reference*. But it is not external to TRACER.
 
-**Correction.** An earlier version of this section asserted that TRACER's cPMI
-panel comes from GSE127465, citing
-`results/reference_npmi/npmi_build_summary.json`. That receipt is real, but it
-describes a panel the benchmark never loaded. The run log is the authority, and
-it names a different file -- see section 8. The panel actually used was built
-from **`lung_cancer_50k.h5ad`, all 50,000 cells**, which is the same object
-RCTD evaluates against and SPLIT purifies against.
+**TRACER's cPMI panel is built from GSE127465.** Confirmed two ways: the panel
+the final run loaded carries `n_cells_i / p_i` = **54,773** on all 44,850 rows,
+which is GSE127465's cell count, and the build receipt at
+`results/reference_npmi/npmi_build_summary.json` names that reference.
 
-The consequence is worse, not better. That 50,000-cell object is
-`Reference` (43,606) **plus** `Validation` (6,394) -- so the panel saw every
-cell in the held-out split, GSE119911's 1,175 included. There is no slice of
-this reference that TRACER's panel did not see.
-
-| method | information source, as actually run | disjoint from the evaluation reference? |
-|---|---|---|
-| SPLIT | the full 50k reference, via RCTD | no |
-| TRACER | a cPMI panel built from the full 50k reference | no |
-| baseline_10x | none | n/a |
-
-So **both** methods are circular with respect to the evaluation reference, by
-two different routes, and the held-out construction below cannot rescue either
-of them.
+GSE127465 supplies **81.6%** of the Validation cells. Scoring TRACER against
+Validation would be scoring it largely against the cohort its own gene-pair
+statistics came from -- the same circularity SPLIT has with the full reference,
+reached by a different route.
 
 So the two methods are entangled with *different* slices of the reference:
 
@@ -190,10 +177,8 @@ So the two methods are entangled with *different* slices of the reference:
 | TRACER | a cPMI panel built from GSE127465 | GSE127465 |
 | baseline_10x | nothing | -- |
 
-No cohort in this reference is disjoint from both, because the panel was built
-from all of it. The nearest thing, **GSE119911** at 1,175 cells, is inside the
-50k object and so was seen by the panel; it is reported below only to show that
-even setting that aside, it is too thin to carry the comparison. Its composition, against the
+The only cohort disjoint from **both** is **GSE119911**, at 1,175 cells -- and
+it is too thin to carry the full comparison. Its composition, against the
 50-cell minimum the pipeline already applies:
 
 | cell type | GSE119911 | >= 50? |
@@ -454,65 +439,76 @@ Practical consequences:
 
 ---
 
-## 8. The panel the NSCLC benchmark actually used
+## 8. Which cPMI panel the NSCLC benchmark used
 
-The TRACER row of the NSCLC Xenium benchmark was produced with a cPMI panel
-that contains **no confidently signed gene pair at all**. This is the single
-most important caveat in this document.
+The TRACER row was produced with a **healthy** panel. This section records the
+verification, because an earlier reading of the evidence got it wrong and the
+way it went wrong is a trap worth marking.
 
-### What was used
+### The panel actually loaded
 
 | | |
 |---|---|
-| absolute path | `/scratch4/adeshpa6/segbench_runs/nsclc_xenium/reference/nsclc_pmi.csv.gz` |
-| filename | `nsclc_pmi.csv.gz` |
-| SHA-256 (file) | `5a6bc4db1adbd717754e6f3ef8ab728d7bb955731404a24155a0d3231f8090f3` |
-| SHA-256 (uncompressed) | `41b0e1c8e931ef107acec36e8b147bb85aaeb52e96de1248fdfd3bbca704c728` |
-| built | 2026-08-29 12:51 |
-| source reference | `TRACER/datasets/dataset/lung_cancer_scrna_10x/lung_cancer_50k.h5ad`, all 50,000 cells |
-| builder | `TRACER/scripts/build_pmi_from_scrna.py`, `--mode all_pairs` |
-| rows | 6,370 (5,196 carrying an NPMI value) |
-| classes present | `low_evidence` 5,185, `indeterminate` 1,174, `neg_one` 11 |
-| classes absent | **`pos` 0, `neg` 0** |
-| pairs above TRACER's `pmi_threshold=0.2` | **184** |
+| absolute path | `/home/lyuan13/scr4_adeshpa6/TRACER/results/reference_npmi/lung_cancer_npmi.csv.gz` |
+| filename | `lung_cancer_npmi.csv.gz` |
+| SHA-256 (file) | `4409f314585c6480dd2d9d353a6d0114e686b63ef61be06876b6b5e805e6d0cb` |
+| SHA-256 (uncompressed) | `1e360e54963b1c8ba6ff826425e249ba3858ef2e52fe1a2902024acabd9cf82f` |
+| built | 2026-05-27 20:30, i.e. **before** the builder regression of section 7 |
+| source reference | GSE127465 -- `n_cells_i / p_i` = **54,773** on all 44,850 rows |
+| pairs | 44,850 (42,770 carrying an NPMI value) |
+| classes | `pos` 15,688, `unsettled` 11,110, `low_evidence` 9,079, `neg` 4,004, `dead_zone` 2,873, `indeterminate` 2,080, `neg_one` 16 |
+| pairs above `pmi_threshold=0.2` | **6,843** |
 
-Source provenance is confirmed from the file's own contents, not from a
-neighbouring receipt: `n_cells_i / p_i` equals **50,000** on every one of the
-6,370 rows.
+`config_receipt.json` records `--pmi .../lung_cancer_npmi.csv.gz`, and that is
+what the run loaded. The receipt is accurate.
 
-### How this was missed, and how it was caught
+### The trap: run.log is appended across runs
 
-`config_receipt.json` records the command line, which carried
-`--pmi .../TRACER/results/reference_npmi/lung_cancer_npmi.csv.gz` -- the
-healthy 44,850-row GSE127465 panel. **The run did not load that file.**
-`run.log` records what was actually opened:
+`run.log` in a TRACER run directory accumulates every attempt, not just the one
+whose outputs survive. This directory holds three:
 
-    Loading NPMI panel: .../nsclc_xenium/reference/nsclc_pmi.csv.gz
-    NPMI panel: 12740 rows after symmetric expansion
+| time | panel loaded | rows after symmetric expansion |
+|---|---|---|
+| 12:36:35 | `nsclc_pmi.csv.gz` | 12,740 (= 2 x 6,370) -- superseded |
+| 12:43:29 | `nsclc_pmi.csv.gz` | 12,740 -- superseded |
+| **13:00:32** | **`lung_cancer_npmi.csv.gz`** | **89,700 (= 2 x 44,850)** |
 
-12,740 = 2 x 6,370. The dataset-scoped panel silently took precedence over the
-CLI argument, so the receipt and the run disagree. **Trust `run.log` over
-`config_receipt.json` for this pipeline** until that precedence is fixed.
+The final entry is the run that produced the outputs on disk:
+`transcripts_tracer_refined.parquet` was written at 13:06:58 and
+`config_receipt.json` at 13:06:59, and the log closes with
+`DONE. Total wall: 387.4s` at 13:07:00.
 
-It was caught by rebuilding a panel from the 50k reference during the section-6
-work and finding the rebuild **byte-identical** to the one the benchmark had
-used: both uncompress to `41b0e1c8e931ef107acec36e8b147bb85aaeb52e96de1248fdfd3bbca704c728`.
-The panel in the benchmark is the output of the regressed builder described in
-section 7.
+**Reading the first `Loading NPMI panel` line instead of the last one inverts
+the conclusion**, because the two superseded attempts used the dataset-scoped
+`nsclc_pmi.csv.gz` -- which, independently, really is the degenerate output of
+the section-7 builder regression. Both facts are true and they are easy to
+weld into a false one.
 
-### What it means for the results
+### Precedence is correct
 
-TRACER ran with **184 usable gene pairs** where a healthy panel supplies on the
-order of 29,000. Every TRACER number for `nsclc_xenium` in this repository --
-the entropy of 0.5270 on matched cells, the reference-free VSI of 0.6470, the
-runtime, the cell counts -- describes TRACER operating on an essentially
-information-free panel.
+Explicit `--pmi` overrides the dataset default. Verified directly:
 
-**These are not measurements of TRACER as intended.** They are a lower bound at
-best, and they should not be cited as TRACER's performance. The comparison
-against SPLIT in sections 2 and 7 is affected accordingly: TRACER was not
-merely differently-informed than SPLIT, it was barely informed at all.
+```bash
+segbench run tracer --dataset nsclc_xenium --outdir /tmp/x --dry-run
+#   -> pmi=.../nsclc_xenium/reference/nsclc_pmi.csv.gz     (dataset default)
 
-Re-running TRACER on a correct panel requires fixing the builder first
-(section 7). Until then the TRACER row stands as provisional, and is marked as
-such wherever it appears.
+segbench run tracer --dataset nsclc_xenium --outdir /tmp/x --dry-run \
+    --pmi .../reference_npmi/lung_cancer_npmi.csv.gz
+#   -> pmi=.../reference_npmi/lung_cancer_npmi.csv.gz      (CLI wins)
+```
+
+`config.apply_to_args` only fills attributes still at their parser default, so a
+flag always beats a config. `tests/test_pmi_precedence.py` locks this in.
+
+### Standing status of the NSCLC TRACER numbers
+
+**Valid.** The entropy of 0.5270 on matched cells, the reference-free VSI of
+0.6470 and the associated counts and runtimes were produced against the
+44,850-pair GSE127465 panel with 6,843 pairs above threshold.
+
+The section-7 builder regression does **not** touch them: it affects panels
+built *after* 2026-06-01, and this panel was built 2026-05-27. It does mean a
+panel regenerated today would be unusable, which is why section 7 stands.
+
+The circularity caveat of section 3 applies unchanged -- the panel is derived
+from GSE127465, which is 81.6% of the Validation split.
