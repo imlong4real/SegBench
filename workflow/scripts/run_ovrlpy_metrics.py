@@ -109,16 +109,28 @@ def score_method(ovrlp, method: str, assign: Path, outdir: Path) -> dict:
     back = codes.select([pl.col("code").alias("cell_id"),
                          pl.col("cell_id").alias("method_cell_id")])
     per_cell = per_cell.join(back, on="cell_id", how="left")
+    # ovrlpy returns one row per (cell, pixel), not one per cell -- a large
+    # cell contributes many rows. Collapse to one row per cell first, or the
+    # median is a median over pixels and silently weights big cells more.
+    per_cell = (per_cell.group_by("cell_id").agg([
+        pl.first("method_cell_id"),
+        pl.len().alias("n_pixels"),
+        pl.col("signal").sum().alias("signal_total"),
+        # signal-weighted, so faint pixels at a cell's edge do not dominate
+        ((pl.col("vsi") * pl.col("signal")).sum()
+         / pl.col("signal").sum()).alias("vsi_weighted"),
+        pl.col("vsi").median().alias("vsi_median_px"),
+    ]))
     out = outdir / f"{method}_per_cell_vsi.parquet"
     per_cell.write_parquet(out)
 
-    vsi = per_cell["integrity"].to_numpy() if "integrity" in per_cell.columns \
-        else per_cell[[c for c in per_cell.columns if "vsi" in c.lower()][0]].to_numpy()
+    vsi = per_cell["vsi_weighted"].to_numpy()
     vsi = vsi[np.isfinite(vsi)]
     n_assigned = int((joined["cell_id"] != -1).sum())
     summary = {
         "method": method,
         "n_cells_scored": int(per_cell.height),
+        "n_pixel_rows": int(joined.height and per_cell["n_pixels"].sum()),
         "n_transcripts_assigned": n_assigned,
         "frac_transcripts_assigned": round(n_assigned / n_before, 4),
         "ovrlpy_vsi_median": float(np.median(vsi)) if vsi.size else None,
