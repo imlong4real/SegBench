@@ -73,10 +73,18 @@ def fit_map(df: pl.DataFrame, n_workers: int, seed: int = 0):
     return ovrlp
 
 
-def score_method(ovrlp, method: str, assign: Path, outdir: Path) -> dict:
-    """Attach one method's transcript->cell map and collect per-cell VSI."""
+def score_method(ovrlp, method: str, assign: Path, outdir: Path,
+                 cell_col: str = "cell_id") -> dict:
+    """Attach one method's transcript->cell map and collect per-cell VSI.
+
+    ``cell_col`` matters: a refinement method's table often carries the vendor
+    assignment under ``cell_id`` and its own under another name (TRACER writes
+    ``tracer_id``). Scoring the wrong column silently reproduces the baseline.
+    """
     import ovrlpy
-    a = pl.read_parquet(assign, columns=["transcript_id", "cell_id"])
+    a = pl.read_parquet(assign, columns=["transcript_id", cell_col])
+    if cell_col != "cell_id":
+        a = a.rename({cell_col: "cell_id"})
     # ovrlpy needs one integer id per transcript, with a sentinel for
     # unassigned; method cell ids are strings, so map them through a code.
     a = a.with_columns(pl.col("cell_id").cast(pl.Utf8))
@@ -92,6 +100,12 @@ def score_method(ovrlp, method: str, assign: Path, outdir: Path) -> dict:
 
     tx = ovrlp.transcripts
     n_before = tx.height
+    # transcript_id is i64 in some standardized tables and str in others;
+    # join keys must agree or polars raises rather than silently missing.
+    if tx["transcript_id"].dtype != a["transcript_id"].dtype:
+        tx = tx.with_columns(pl.col("transcript_id").cast(pl.Utf8))
+        a = a.with_columns(pl.col("transcript_id").cast(pl.Utf8))
+        ovrlp.transcripts = tx
     # ovrlpy's own pipeline puts a cell_id on the frame, and each method
     # overwrites it in turn -- drop it first so the alias below does not
     # collide, and so method N is never scored against method N-1's ids.
@@ -152,7 +166,10 @@ def main() -> int:
                     help="any method's transcripts parquet; only coordinates "
                          "and gene are read, and those are shared")
     ap.add_argument("--assignments", nargs="*", default=[],
-                    metavar="METHOD=PATH")
+                    metavar="METHOD=PATH[:COLUMN]",
+                    help="COLUMN defaults to cell_id; give it explicitly for a "
+                         "method that writes its own assignment elsewhere "
+                         "(e.g. tracer=<path>:tracer_id)")
     ap.add_argument("--outdir", type=Path, required=True)
     ap.add_argument("--crop", type=float, default=None,
                     help="fit on a spatial fraction of the sample (testing)")
@@ -166,14 +183,17 @@ def main() -> int:
     pristine = ovrlp.transcripts          # restored before each method
     summaries = []
     for spec in args.assignments:
-        method, _, path = spec.partition("=")
+        method, _, rhs = spec.partition("=")
+        path, sep, col = rhs.rpartition(":")
+        if not sep:                      # no ":col" suffix given
+            path, col = rhs, "cell_id"
         p = Path(path)
         if not p.exists():
             _log(f"!! {method}: {p} missing, skipped")
             continue
         try:
             ovrlp.transcripts = pristine
-            summaries.append(score_method(ovrlp, method, p, args.outdir))
+            summaries.append(score_method(ovrlp, method, p, args.outdir, col))
         except Exception as exc:            # one bad method must not sink the rest
             _log(f"!! {method} failed: {type(exc).__name__}: {exc}")
             summaries.append({"method": method, "error": f"{type(exc).__name__}: {exc}"})
