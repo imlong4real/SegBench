@@ -91,6 +91,10 @@ def score_method(ovrlp, method: str, assign: Path, outdir: Path) -> dict:
 
     tx = ovrlp.transcripts
     n_before = tx.height
+    # ovrlpy's own pipeline puts a cell_id on the frame, and each method
+    # overwrites it in turn -- drop it first so the alias below does not
+    # collide, and so method N is never scored against method N-1's ids.
+    tx = tx.drop([c for c in ("cell_id", "code") if c in tx.columns])
     joined = tx.join(a.select(["transcript_id", "code"]), on="transcript_id",
                      how="left").with_columns(
         pl.col("code").fill_null(-1).alias("cell_id"))
@@ -143,6 +147,7 @@ def main() -> int:
     df = load_transcripts(args.transcripts, args.crop)
     ovrlp = fit_map(df, args.n_workers)
 
+    pristine = ovrlp.transcripts          # restored before each method
     summaries = []
     for spec in args.assignments:
         method, _, path = spec.partition("=")
@@ -151,6 +156,7 @@ def main() -> int:
             _log(f"!! {method}: {p} missing, skipped")
             continue
         try:
+            ovrlp.transcripts = pristine
             summaries.append(score_method(ovrlp, method, p, args.outdir))
         except Exception as exc:            # one bad method must not sink the rest
             _log(f"!! {method} failed: {type(exc).__name__}: {exc}")

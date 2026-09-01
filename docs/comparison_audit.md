@@ -82,6 +82,24 @@ was being penalised for scoring. **About 30% of SPLIT's apparent entropy
 advantage is selection.** The remainder is real under this metric -- but see
 the next section for what that metric actually measures.
 
+### Against a do-nothing baseline
+
+The vendor segmentation, scored on the same 35,242 cells, is the reference
+point the original table never had:
+
+| method (matched cells) | entropy | max weight | entropy reduction vs baseline |
+|---|---|---|---|
+| baseline_10x (do nothing) | 0.7505 | 0.7441 | -- |
+| tracer | 0.5270 | 0.8300 | 0.2235 (29.8%) |
+| split | 0.3985 | 0.8875 | **0.3521 (46.9%)** |
+
+Both methods genuinely improve on doing nothing, and on this metric SPLIT
+improves more even after matching. That is the fair statement of SPLIT's
+result: its lead over TRACER is smaller than the headline table implied, not
+absent. What the number cannot tell you is how much of that lead is
+segmentation quality and how much is agreement with the reference SPLIT was
+optimised against -- which is what section 3 is about.
+
 ### Which methods can be matched at all
 
 Only methods that preserve the vendor cell-id space:
@@ -128,25 +146,66 @@ accuracy metrics:
 The relabelling applies to *every* method. It is not a penalty aimed at SPLIT;
 it states what the number measures.
 
-### Held-out evaluation
+### Held-out evaluation, and why the obvious split does not work
 
-The reference carries a study-disjoint split, which makes a genuinely
-independent evaluation possible:
+The reference carries a study-disjoint split, which at first looks like a ready
+made independent cohort:
 
 | `id` | cells | studies |
 |---|---|---|
-| Reference | 43,606 | GSE131907, KU_loom, GSE148071, GSE136246, GSE153935 |
-| Validation | 6,394 | GSE119911, GSE127465 |
+| Reference | 43,606 | GSE131907 (14,539), KU_loom (13,603), GSE148071 (8,715), GSE136246 (5,960), GSE153935 (789) |
+| Validation | 6,394 | **GSE127465 (5,219)**, GSE119911 (1,175) |
 
-The two halves share **no study** (verified by
-`audit.describe_disjointness`), so the Validation half is a real external
-cohort rather than a random subsample of the same donors.
+The two halves share no study, so Validation is genuinely external *to the RCTD
+reference*. But it is not external to TRACER.
 
-The pseudo-bulk metrics (Kendall, marker logFC) are therefore recomputed
-against the Validation studies only. RCTD's labels still derive from the full
-reference -- re-running RCTD per held-out split was not affordable here -- so
-the held-out columns break the circularity of the *evaluation target*, not of
-the labels. That limit is stated rather than glossed.
+**TRACER's cPMI panel is built from GSE127465.** From the panel's own build
+receipt (`results/reference_npmi/npmi_build_summary.json`):
+
+    --reference-h5ad datasets/lung_cancer_scrna_GSE127465/processed/h5ad/
+                     lung_scrna_GSE127465_harmonized.h5ad
+
+and GSE127465 supplies **81.6%** of the Validation cells. Scoring TRACER
+against Validation would be scoring it largely against the cohort its own gene
+pair statistics came from -- the same circularity SPLIT has with the full
+reference, just via a different route.
+
+So the two methods are entangled with *different* slices of the reference:
+
+| method | optimises against | circular with respect to |
+|---|---|---|
+| SPLIT | the full 50k reference, via RCTD | the entire evaluation reference |
+| TRACER | a cPMI panel built from GSE127465 | GSE127465 |
+| baseline_10x | nothing | -- |
+
+The only cohort disjoint from **both** is **GSE119911**, at 1,175 cells -- and
+it is too thin to carry the full comparison. Its composition, against the
+50-cell minimum the pipeline already applies:
+
+| cell type | GSE119911 | >= 50? |
+|---|---|---|
+| T | 574 | yes |
+| Myeloid | 319 | yes |
+| Cancer | 206 | yes |
+| Mast | 33 | no |
+| B | 33 | no |
+| Fibroblasts | 6 | no |
+| Plasma | 4 | no |
+| Endothelial | 0 | absent |
+| Ciliated | 0 | absent |
+
+**Three of the nine cell types survive.** So the conclusion to state plainly:
+
+> A fully independent held-out evaluation is **not possible** with this
+> reference. Every cohort large enough to score against is one that either
+> SPLIT (via RCTD) or TRACER (via its cPMI panel) was already fitted to.
+
+What *is* possible is a restricted check on GSE119911 over T, Myeloid and
+Cancer -- the three most abundant types, 1,099 of its 1,175 cells. That is
+reported as a partial, low-power check, not as the independent evaluation the
+benchmark would need. Fixing this properly means sourcing an external lung
+scRNA cohort that contributed to neither the RCTD reference nor the cPMI
+panel, which is a data-acquisition task rather than an analysis one.
 
 ---
 
