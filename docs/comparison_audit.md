@@ -296,10 +296,49 @@ those 2,120 cells beside 35,242 matched cells would have been a textbook
 instance of the very selection effect this document is about -- a number
 computed on 3.6% of the data, presented as if comparable.
 
-The panel is being rebuilt in `all_pairs` mode so that build mode, gene set and
-every threshold match TRACER's own, leaving the source cohort as the only
-difference. Until that lands, **the 2x2 has one empty cell, and it is left
-empty.**
+Rebuilding in `all_pairs` mode, so that build mode, gene set and every
+threshold match TRACER's own, did not rescue it either -- and the reason is
+worth recording, because it is a property of the reference rather than of the
+build:
+
+| | 50k RCTD reference | GSE127465 |
+|---|---|---|
+| rows written | 6,370 | 44,850 |
+| pairs with an NPMI value | 5,196 | 42,770 |
+| **mean expected co-occurrence** | **3.31** | **159.05** |
+| pairs clearing `--min-expected-cooccurrence 10` | **11** | 29,394 |
+| `pos` / `neg` pairs | **0 / 0** | 15,688 / 4,004 |
+
+A 48x difference in expected co-occurrence. At that level essentially every
+gene pair fails the evidence threshold, so the panel contains no confidently
+signed pair at all -- only `low_evidence` and `indeterminate` rows. It is not a
+sparser panel; it is an empty one wearing a panel's schema.
+
+### The conclusion for the 2x2
+
+**The panel swap cannot be performed with this reference.** The 50k RCTD
+reference is a suitable *deconvolution* reference -- RCTD needs per-cell-type
+mean profiles, which it has -- but it is not a suitable *co-expression* source,
+because cPMI needs gene pairs to co-occur within single cells often enough to
+estimate a stable ratio, and this object is too shallow over the 302-gene panel
+for that.
+
+So the 2x2 stands as:
+
+| | GSE127465-derived | 50k-reference-derived |
+|---|---|---|
+| TRACER | entropy 0.5270 (matched) | **not constructible** |
+| SPLIT | not run | entropy 0.3985 (matched) |
+
+Two of four cells are filled, and the two empty ones are empty for different
+reasons: the TRACER/50k cell is blocked by the reference's depth (measured
+above), and the SPLIT/GSE127465 cell was not attempted.
+
+**Therefore the question "is TRACER's result about TRACER or about its panel?"
+is still open.** Answering it needs a second scRNA cohort with enough depth
+over the panel genes to build a real cPMI table -- a data-acquisition step. It
+is not answerable by re-running anything already on this machine, and the
+degenerate run that scored 2,120 cells must not be presented as the answer.
 
 ---
 
