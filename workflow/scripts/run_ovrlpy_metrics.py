@@ -80,7 +80,8 @@ def score_method(ovrlp, method: str, assign: Path, outdir: Path) -> dict:
     # ovrlpy needs one integer id per transcript, with a sentinel for
     # unassigned; method cell ids are strings, so map them through a code.
     a = a.with_columns(pl.col("cell_id").cast(pl.Utf8))
-    unassigned_tokens = {"", "-1", "0", "None", "nan", "NA", "background"}
+    unassigned_tokens = {"", "-1", "0", "None", "nan", "NA", "background",
+                         "UNASSIGNED", "unassigned", "NA_character_"}
     a = a.with_columns(
         pl.when(pl.col("cell_id").is_null() | pl.col("cell_id").is_in(list(unassigned_tokens)))
         .then(None).otherwise(pl.col("cell_id")).alias("cell_id"))

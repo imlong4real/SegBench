@@ -265,3 +265,41 @@ but no `native_*` row. The vendor segmentation's metrics over all 58,449 of its
 own cells were not computed. That does not affect any claim made here -- every
 claim about baseline is a matched-set claim -- but the table must not be read as
 if the missing cell were merely omitted for space.
+
+---
+
+## 6. Is TRACER's result about TRACER, or about its panel?
+
+TRACER and SPLIT differ in two ways at once: the algorithm, and the cohort
+whose statistics it consumes. Section 3 showed the cohorts are different
+(GSE127465 for TRACER's cPMI panel, the full 50k reference for SPLIT). This
+section holds the segmentation and the algorithm fixed and swaps only the
+panel's source cohort.
+
+A second cPMI panel was built from the **same 50k reference SPLIT purifies
+against**, with every build parameter identical to TRACER's own panel
+(`--mode sparse_pairs --min-cells-expressed 10
+--min-expected-cooccurrence 10 --pmi-abs-threshold 0.2 --bootstrap-n 100
+--seed 1`, same active-bootstrap settings, same 302-gene spatial panel).
+
+The two panels are **not** equivalent in size:
+
+| panel | source cohort | genes | output pairs |
+|---|---|---|---|
+| TRACER's own | GSE127465 | 300 | **35,912** |
+| 50k-reference | the RCTD reference | 299 | **4,171** |
+
+An 8.6x difference from identical parameters. The build diagnostics say why:
+of 36,477 candidate pairs, 10,418 came back `unsettled` (bootstrap CI never
+tightened to the requested width) and 4,974 landed in the dead zone. The 50k
+reference is harmonised across seven studies, and cross-study heterogeneity
+widens the per-pair confidence intervals until most pairs fail the evidence
+test. A single-cohort reference gives tighter, more confident co-expression
+statistics.
+
+**So the swap changes two things at once** -- source cohort *and* panel
+density -- and any difference in TRACER's metrics is attributable to their
+combination, not to provenance alone. Reporting the panel sizes next to the
+result is therefore part of the result, not a footnote. Separating the two
+would need a density-matched panel (e.g. taking the top 4,171 pairs of
+TRACER's own panel by |NPMI|), which is a further run.
