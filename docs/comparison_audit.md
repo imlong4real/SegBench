@@ -395,3 +395,45 @@ quality from agreement with SPLIT's own objective**, and that the only
 available independent check does not cover SPLIT. A benchmark that reports
 SPLIT as the winner without both of those facts alongside is overstating what
 it measured.
+
+### The panel builder drops every bootstrapped pair
+
+The blocker is now pinned to a specific defect, and it is worth reporting
+upstream because it silently produces a file that looks like a panel.
+
+The `all_pairs` rebuild's own diagnostics say what it computed:
+
+| classification | pairs |
+|---|---|
+| `pos` (confident positive association) | 11,585 |
+| `neg` (confident negative) | 11,204 |
+| `unsettled` | 10,418 |
+| `dead_zone` | 4,974 |
+| **subtotal: successfully bootstrapped** | **38,181** |
+| `low_evidence` | 5,185 |
+| `indeterminate` | 1,174 |
+| `neg_one` | 11 |
+| **subtotal: not bootstrappable** | **6,370** |
+
+and `n_output_pairs: 6,370`.
+
+The written file is *exactly* the pairs the bootstrap could not evaluate. All
+38,181 that it did evaluate -- including 22,789 with a confident sign -- are
+discarded at write time. The reference was fine and the statistics were
+computed; only the last step is broken.
+
+For contrast, TRACER's own panel carries every class (`pos` 15,688, `neg`
+4,004, `unsettled` 11,110, `dead_zone` 2,873, `low_evidence` 9,079,
+`indeterminate` 2,080). It was built on **2026-05-27**; the builder script was
+last modified **2026-06-01**. The panel in use predates the regression, which
+is why nothing downstream has noticed it.
+
+Practical consequences:
+
+1. **Any cPMI panel built with the current script is unusable**, and fails
+   quietly -- it emits a well-formed CSV with the right schema and a plausible
+   row count, containing only the pairs that carry no information.
+2. The 2x2 stays blocked on this, not on the data.
+3. Anything else in this project that rebuilds a panel is affected the same
+   way. That includes the `kidney_visiumhd` reference panel if it is ever
+   regenerated.
