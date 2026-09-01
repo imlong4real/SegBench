@@ -296,49 +296,52 @@ those 2,120 cells beside 35,242 matched cells would have been a textbook
 instance of the very selection effect this document is about -- a number
 computed on 3.6% of the data, presented as if comparable.
 
-Rebuilding in `all_pairs` mode, so that build mode, gene set and every
-threshold match TRACER's own, did not rescue it either -- and the reason is
-worth recording, because it is a property of the reference rather than of the
-build:
+Rebuilding in `all_pairs` mode did not rescue it either, and the first
+explanation offered here for that -- that the 50k reference is too shallow to
+support cPMI -- **was wrong, and is retracted.** Measuring the two references
+directly refutes it:
 
-| | 50k RCTD reference | GSE127465 |
+| over the 300 panel genes | 50k RCTD reference | GSE127465 |
 |---|---|---|
-| rows written | 6,370 | 44,850 |
-| pairs with an NPMI value | 5,196 | 42,770 |
-| **mean expected co-occurrence** | **3.31** | **159.05** |
-| pairs clearing `--min-expected-cooccurrence 10` | **11** | 29,394 |
-| `pos` / `neg` pairs | **0 / 0** | 15,688 / 4,004 |
+| cells | 50,000 | 54,773 |
+| counts per cell | 907 mean / 92 median | 60 mean / 52 median |
+| per-gene detection rate | 0.096 | 0.054 |
+| **fraction of gene pairs with expected co-occurrence >= 10** | **80.7%** | 64.8% |
 
-A 48x difference in expected co-occurrence. At that level essentially every
-gene pair fails the evidence threshold, so the panel contains no confidently
-signed pair at all -- only `low_evidence` and `indeterminate` rows. It is not a
-sparser panel; it is an empty one wearing a panel's schema.
+The 50k reference is the *deeper* of the two and should clear the evidence
+threshold on **more** pairs, not fewer. (An earlier version of this measurement
+sampled the first 5,000 cells of each object rather than a random 8,000; with
+files ordered by study that is a biased slice, and it gave the opposite answer
+for the mean. Random sampling is what the table above uses.)
 
-### The conclusion for the 2x2
+What the panel files actually record settles the provenance question that the
+missing build receipt left open. Every row carries `n_cells_i` and `p_i`, whose
+ratio is the source cohort's cell count:
 
-**The panel swap cannot be performed with this reference.** The 50k RCTD
-reference is a suitable *deconvolution* reference -- RCTD needs per-cell-type
-mean profiles, which it has -- but it is not a suitable *co-expression* source,
-because cPMI needs gene pairs to co-occur within single cells often enough to
-estimate a stable ratio, and this object is too shallow over the 302-gene panel
-for that.
+- `lung_cancer_npmi.csv.gz` -> **54,773** cells on all 44,850 rows = GSE127465
+- the rebuilt panel -> **50,000** cells on all 6,370 rows = the 50k reference
 
-So the 2x2 stands as:
+So TRACER's panel is confirmed to come from GSE127465 (section 3 stands), and
+the rebuild did read the reference it was given.
 
-| | GSE127465-derived | 50k-reference-derived |
-|---|---|---|
-| TRACER | entropy 0.5270 (matched) | **not constructible** |
-| SPLIT | not run | entropy 0.3985 (matched) |
+### Where this actually failed
 
-Two of four cells are filled, and the two empty ones are empty for different
-reasons: the TRACER/50k cell is blocked by the reference's depth (measured
-above), and the SPLIT/GSE127465 cell was not attempted.
+The builder computed what it should: `n_candidate_pairs_pre = 44,551`, of which
+8,063 were dropped for expected co-occurrence below 10, leaving 36,477
+candidates. The file it then wrote holds 6,370 rows whose mean expected
+co-occurrence is **3.31**, with only 11 at or above 10 -- that is, the written
+rows are drawn from the pairs that were *rejected*, not the 36,477 that
+survived. The 29,394 well-evidenced pairs GSE127465's panel carries have no
+counterpart in the output.
+
+**This is a tooling problem, not a property of the reference.** Until it is
+understood, the honest position is that the swap has not been performed --
+not that it cannot be.
 
 **Therefore the question "is TRACER's result about TRACER or about its panel?"
-is still open.** Answering it needs a second scRNA cohort with enough depth
-over the panel genes to build a real cPMI table -- a data-acquisition step. It
-is not answerable by re-running anything already on this machine, and the
-degenerate run that scored 2,120 cells must not be presented as the answer.
+is still open** -- blocked on a panel-writing step that is not yet understood,
+with the reference itself measured and adequate. The degenerate run that scored
+2,120 cells must not be presented as the answer.
 
 ---
 
