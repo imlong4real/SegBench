@@ -38,3 +38,9 @@ methods:
 
   tracer_seq:
     python: ${TRACER_VENV}/bin/python
+
+# Evaluation-only tools. These are not segmentation methods, so they have no
+# entry in the method registry; `segbench doctor` still probes them.
+tools:
+  ovrlpy:
+    python: ${SEGBENCH_ENV_ROOT}/venvs/ovrlpy/bin/python

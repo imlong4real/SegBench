@@ -1,0 +1,208 @@
+# Audit: why the headline table overstates SPLIT
+
+The first comparison table ranked SPLIT ahead of every other method on all four
+reference-based metrics. This document tests that result and finds it is
+substantially an artefact of two things the table did not control for:
+**which cells each method is scored on**, and **the fact that SPLIT optimises
+against the same reference the benchmark evaluates with**.
+
+Nothing here says SPLIT is a bad method. It says the original table did not
+support the comparison that was being read off it.
+
+---
+
+## 1. SPLIT is scored on 62% of the cells
+
+SPLIT is a purification method: it consumes the vendor segmentation and
+returns cleaned profiles. It does not return all of them.
+
+| Stage | Cells | Lost |
+|---|---|---|
+| Vendor 10x Xenium segmentation | 58,449 | — |
+| SPLIT purified output | 40,811 | **17,638** (30.2%) |
+| Scored by the benchmark's RCTD | 36,261 | 4,550 more |
+
+**SPLIT's published metrics describe 62.0% of the original cells.** TRACER's
+describe 70.3%, and the two populations are not the same cells.
+
+The wrapper had already recorded the first drop --
+`n_cells_original_dropped_by_split: 17638` in `split_pruning_summary.json` --
+but nothing propagated it into the comparison table, so it never reached the
+reader.
+
+### Where the cells go
+
+Two mechanisms, both selective, neither a bug:
+
+1. **Depth threshold.** `workflow/scripts/_count_correction/run_split_tsu20_real.R`
+   builds RCTD with `UMI_min = 10` and `counts_MIN = 10`. Retained cells have a
+   hard floor at exactly 10 total counts; 12,820 vendor cells fall below it.
+2. **RCTD spot-class rejection.** The remaining ~4,818 dropped cells clear the
+   depth floor but are not confidently typed, so purification has nothing to
+   act on.
+
+A third filter then applies: the benchmark's own RCTD re-imposes `UMI_min = 10`
+on the *purified* counts, which are lower than the originals because
+purification removes counts. That is the 40,811 -> 36,261 step.
+
+| | n | mean counts | median | min | max |
+|---|---|---|---|---|---|
+| dropped | 17,638 | 8.7 | 7 | 1 | 100 |
+| retained | 40,811 | 34.2 | 28 | **10** | 271 |
+
+### The dropped cells are the hard ones
+
+This is the decisive measurement. TRACER scores every cell, so it can be
+evaluated separately on the two populations SPLIT splits the data into:
+
+| TRACER restricted to | n | RCTD entropy | max weight |
+|---|---|---|---|
+| cells SPLIT **kept** | 35,242 | 0.527 | 0.830 |
+| cells SPLIT **dropped** | 5,828 | **0.948** | **0.561** |
+
+Entropy 0.948 is close to the maximum for this cell-type universe: these are
+cells no method can confidently type. SPLIT is never asked to.
+
+---
+
+## 2. Matched-cell comparison
+
+Restricting every comparable method to the 35,242 cells scored for all of
+them:
+
+| | native | matched | change |
+|---|---|---|---|
+| split entropy | 0.4031 | 0.3985 | -0.005 |
+| tracer entropy | 0.5857 | 0.5270 | **-0.059** |
+| gap | 0.183 | **0.129** | -30% |
+
+SPLIT barely moves, because the matched set is almost exactly its own native
+set. TRACER improves substantially, because matching removes the hard cells it
+was being penalised for scoring. **About 30% of SPLIT's apparent entropy
+advantage is selection.** The remainder is real under this metric -- but see
+the next section for what that metric actually measures.
+
+### Which methods can be matched at all
+
+Only methods that preserve the vendor cell-id space:
+
+| method | matched? | why |
+|---|---|---|
+| baseline_10x | yes | vendor segmentation itself |
+| split | yes | purifies vendor cells in place |
+| tracer | yes | refines assignments within vendor cells |
+| proseg, baysor | **no** | de-novo segmentation: their cells are new objects with no cell-for-cell correspondence |
+| celladmix | see run | refinement; correspondence checked empirically |
+
+For the de-novo methods there is no matched comparison to make. That is a
+property of the methods, and is reported rather than papered over.
+
+---
+
+## 3. Reference circularity
+
+The four reference-based metrics are **not independent of SPLIT's objective**.
+
+SPLIT purifies by running RCTD against the scRNA reference and removing the
+count mass that does not fit the dominant singlet profile. The benchmark then
+scores it by running RCTD against the same reference and asking how
+concentrated the weights are.
+
+A method that removes exactly the counts which make RCTD weights diffuse will
+score well on a metric defined as "RCTD weights are not diffuse". That is not
+evidence about segmentation quality; it is the optimiser reporting its own
+objective.
+
+Confirmed from `rctd.log`: the benchmark RCTD used **all 50,000** reference
+cells (`[ref] 50000 cells across 9 celltypes`) -- the same object SPLIT was
+given.
+
+These four are therefore relabelled **reference-concordance** metrics, not
+accuracy metrics:
+
+- `rctd_entropy_median`
+- `rctd_max_weight_median`
+- `kendall_tau_median`
+- `marker_logfc_median`
+
+The relabelling applies to *every* method. It is not a penalty aimed at SPLIT;
+it states what the number measures.
+
+### Held-out evaluation
+
+The reference carries a study-disjoint split, which makes a genuinely
+independent evaluation possible:
+
+| `id` | cells | studies |
+|---|---|---|
+| Reference | 43,606 | GSE131907, KU_loom, GSE148071, GSE136246, GSE153935 |
+| Validation | 6,394 | GSE119911, GSE127465 |
+
+The two halves share **no study** (verified by
+`audit.describe_disjointness`), so the Validation half is a real external
+cohort rather than a random subsample of the same donors.
+
+The pseudo-bulk metrics (Kendall, marker logFC) are therefore recomputed
+against the Validation studies only. RCTD's labels still derive from the full
+reference -- re-running RCTD per held-out split was not affordable here -- so
+the held-out columns break the circularity of the *evaluation target*, not of
+the labels. That limit is stated rather than glossed.
+
+---
+
+## 4. What the corrected table reports
+
+Three views per method, so a lead earned by dropping cells is visible as such:
+
+- `native_*` -- the method's own output, on whatever cells it emitted. This is
+  what the original table showed.
+- `matched_*` -- the same metric on the fixed cell set common to all
+  comparable methods.
+- `heldout_*` -- pseudo-bulk metrics against the study-disjoint Validation
+  cohort.
+
+Reproduce with:
+
+```bash
+scripts/audit_selection_bias.py --dataset nsclc_xenium
+```
+
+Outputs `corrected_comparison.csv`, `cell_funnel.csv` and
+`audit_provenance.json` (which records the matched cell count, the excluded
+methods and their reasons, and the held-out cohort membership).
+
+---
+
+## 5. Scoring the baseline: what it cost, and what was scored instead
+
+The vendor segmentation had never been scored by the benchmark's own RCTD, so
+there was no "do nothing" row to compare the purification methods against.
+Adding one turned out to be the most expensive item in this audit.
+
+Two problems had to be fixed first:
+
+1. **The reference was loaded whole before genes were restricted.**
+   `run_rctd.R` does subset the reference to the spatial panel, but only after
+   `read_h5ad` has pulled the full 50,000 x 72,131 scRNA matrix into R, so peak
+   memory is set by a matrix ~180x larger than the one actually used. Under a
+   5 GB cgroup that is killed before RCTD starts.
+   `segbench.evaluate.panel_restricted_reference` now writes a panel-only copy
+   of the reference once (360 MB -> 47 MB), keyed by a hash of the panel, and
+   hands R a file that is already narrow.
+2. **The parallel worker cluster is fragile on a contended node.** A 58,449-cell
+   doublet-mode run held 4 cores for over nine hours at ~37% CPU each (login
+   node load average 18-25, 45 users) and then died with
+   `unserialize(node$con): error reading from connection` -- a SOCK worker lost.
+   The master hung and two workers were orphaned onto init, still spinning.
+
+Rather than pay that cost again for a number the comparison does not need, the
+baseline was scored on **the matched cell set only** (35,242 cells): that is
+precisely the population the corrected table compares on, and it is 40% smaller.
+All 35,242 matched cells are present in the vendor object with >= 10 counts, so
+nothing is lost to the depth filter.
+
+**Consequence to read honestly:** there is a `matched_*` row for `baseline_10x`
+but no `native_*` row. The vendor segmentation's metrics over all 58,449 of its
+own cells were not computed. That does not affect any claim made here -- every
+claim about baseline is a matched-set claim -- but the table must not be read as
+if the missing cell were merely omitted for space.
