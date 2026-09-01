@@ -103,9 +103,12 @@ def score_method(ovrlp, method: str, assign: Path, outdir: Path) -> dict:
 
     per_cell = ovrlpy.cell_integrity_from_transcripts(ovrlp, cell_id="cell_id",
                                                       unassigned=-1)
-    # back to the method's own cell ids
-    per_cell = per_cell.join(codes.rename({"code": "cell_id"}),
-                             on="cell_id", how="left")
+    # Back to the method's own cell ids. `codes` holds both cell_id and code,
+    # so build the lookup with explicit aliases -- renaming code -> cell_id in
+    # place would collide with the column already there.
+    back = codes.select([pl.col("code").alias("cell_id"),
+                         pl.col("cell_id").alias("method_cell_id")])
+    per_cell = per_cell.join(back, on="cell_id", how="left")
     out = outdir / f"{method}_per_cell_vsi.parquet"
     per_cell.write_parquet(out)
 
