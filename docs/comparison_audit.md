@@ -300,3 +300,56 @@ The panel is being rebuilt in `all_pairs` mode so that build mode, gene set and
 every threshold match TRACER's own, leaving the source cohort as the only
 difference. Until that lands, **the 2x2 has one empty cell, and it is left
 empty.**
+
+---
+
+## 7. The reference-free metric, and what it says
+
+ovrlpy's vertical signal integrity (VSI) asks whether the transcripts a method
+assigned to a cell come from a vertically coherent signal. It is computed from
+transcript coordinates and gene identities alone -- **no cell-type reference is
+involved**, so it is the one metric here that neither SPLIT nor TRACER can be
+optimising against.
+
+The integrity map depends only on the coordinates, which every method on this
+sample shares, so it is fitted once (1,552,421 transcripts, 108 s) and each
+method's transcript-to-cell assignment is scored against the identical map.
+
+| method | cells | VSI median | VSI mean | frac cells VSI<0.5 | tx assigned |
+|---|---|---|---|---|---|
+| **tracer** | 55,967 | **0.6470** | 0.5875 | 0.3188 | 0.917 |
+| celladmix | 54,664 | 0.6457 | 0.5818 | 0.3272 | 0.925 |
+| baseline_10x | 58,449 | 0.6268 | 0.5649 | 0.3537 | 0.999 |
+| proseg | 56,930 | 0.6229 | 0.5622 | 0.3535 | 0.871 |
+| baysor | 17,691 | 0.5474 | 0.5121 | 0.4390 | 0.991 |
+| **split** | -- | **not measurable** | | | |
+
+Read against the do-nothing baseline (0.6268):
+
+- **tracer** +0.0202 and **celladmix** +0.0189: both leave cells sitting in
+  more vertically coherent signal than the vendor segmentation did.
+- **proseg** -0.0039: indistinguishable from doing nothing on this metric.
+- **baysor** -0.0794, with 43.9% of its cells below 0.5 against 35.4% for the
+  baseline. Baysor emits 17,691 cells where the others emit ~56,000, so its
+  cells are far larger, and larger cells span more vertically incoherent
+  tissue. The metric is measuring a real consequence of that choice.
+
+### The finding that matters
+
+**SPLIT cannot be scored on this metric at all.** It emits purified per-cell
+count profiles, not transcript-level assignments (`not_transcript_level_
+reason.txt` in its output directory records this), so there is nothing to lay
+against the integrity map.
+
+That produces the sharpest statement this audit can make:
+
+> On the four metrics that are scored against the same reference SPLIT
+> optimises against, SPLIT ranks first. On the one metric that is independent
+> of that reference, SPLIT cannot be evaluated, and TRACER ranks first.
+
+This is not evidence that SPLIT is worse. It is evidence that **the original
+ranking rested entirely on metrics that could not distinguish segmentation
+quality from agreement with SPLIT's own objective**, and that the only
+available independent check does not cover SPLIT. A benchmark that reports
+SPLIT as the winner without both of those facts alongside is overstating what
+it measured.
