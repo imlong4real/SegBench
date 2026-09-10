@@ -144,6 +144,7 @@ process SEGGER {
     tag "${sample_name}"
     label 'segger_gpu'
     input:
+    val cpu_method_gate
     path prepared
     path seeded_cli
     path resource_runner
@@ -448,13 +449,22 @@ workflow {
         STANDARDIZE_BAYSOR(PREP_XENIUM.out.prepared, BAYSOR.out.native_output, baysor_std_ch,
                            params.sample_name, params.seed)
         PROSEG(PREP_XENIUM.out.prepared, resource_script_ch, params.sample_name, params.seed)
-        SEGGER(PREP_XENIUM.out.prepared, segger_cli_ch, resource_script_ch, params.sample_name, params.seed)
-        STANDARDIZE_SEGGER(PREP_XENIUM.out.prepared, SEGGER.out.native_output, segger_std_ch,
-                           params.sample_name, params.seed)
         SPLIT(PREP_XENIUM.out.prepared, train_ch, resource_script_ch, params.sample_name, params.seed)
         CELLADMIX(PREP_XENIUM.out.prepared, clusters_ch, resource_script_ch, params.sample_name, params.seed)
         TRACER_SEG(PREP_XENIUM.out.prepared.map{ it.resolve('exact_transcripts.parquet') }, pmi_ch,
                    segbench_src_ch, resource_script_ch, params.sample_name, params.seed)
+        // Submit the GPU task only after every independent CPU method finishes.
+        // This prevents an unavailable GPU instance from head-of-line blocking
+        // CPU jobs in a shared Cirro/AWS Batch queue.  Mapping paths to scalar
+        // values creates a scheduling barrier without staging method outputs.
+        cpu_method_gate = STANDARDIZE_BAYSOR.out.results
+            .mix(PROSEG.out.results, SPLIT.out.results, CELLADMIX.out.results, TRACER_SEG.out.results)
+            .map { 1 }
+            .collect()
+        SEGGER(cpu_method_gate, PREP_XENIUM.out.prepared, segger_cli_ch, resource_script_ch,
+               params.sample_name, params.seed)
+        STANDARDIZE_SEGGER(PREP_XENIUM.out.prepared, SEGGER.out.native_output, segger_std_ch,
+                           params.sample_name, params.seed)
         methods = STANDARDIZE_BAYSOR.out.results.mix(PROSEG.out.results, STANDARDIZE_SEGGER.out.results,
                   SPLIT.out.results, CELLADMIX.out.results, TRACER_SEG.out.results).collect()
         EVALUATE_XENIUM(methods, holdout_ch, pmi_ch, split_manifest_ch, input_manifest_ch,
