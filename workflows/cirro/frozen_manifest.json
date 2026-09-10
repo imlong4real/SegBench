@@ -110,7 +110,9 @@
     "tracer": {
       "version": "0.1.1",
       "commit": "ee259003be572581c434dd5bed40d7568f05f906",
-      "container": "ghcr.io/imlong4real/tracer@sha256:1ab4e0b2704fad56237fb4a9099c4ecbd1d83c71a52b3738386e5fafca90d282",
+      "upstream_container": "ghcr.io/imlong4real/tracer@sha256:1ab4e0b2704fad56237fb4a9099c4ecbd1d83c71a52b3738386e5fafca90d282",
+      "container": "ghcr.io/imlong4real/segbench-tracer@sha256:7b1108f2082f3a10baa27e9976be0b58a27564d03f9af7bdb240b4c73361d4a5",
+      "container_delta": "Adds only procps so Nextflow can collect task metrics; TRACER code and dependencies remain those of the pinned upstream image.",
       "seg_parameters": {"platform": "xenium", "tau": 0.05, "min_tx_per_cell_for_scores": 5, "threads": 32, "seed": 20260909},
       "noseg_parameters": {"bin_size_um": 2, "threads": 32, "seed": 20260909}
     },
@@ -121,8 +123,10 @@
   },
   "workflow_containers": {
     "build_commit": "f13ecb86763f9eb6a8ddc0f69e0100b3a6a508c3",
+    "tracer_runner_build_commit": "09a93362ceb7fbd2fd714b0d960e32efaa14f5d2",
     "analysis": "ghcr.io/imlong4real/segbench-analysis@sha256:98985cd498937a651cb4c278d562452606c24a9bea7095d1eecd5c7fea6a42a3",
-    "segger": "ghcr.io/imlong4real/segbench-segger@sha256:6cf8c29e5217b294f2b2be0d975a1e9c9732a9568ceec4e7cbd2ddcc61e2776c"
+    "segger": "ghcr.io/imlong4real/segbench-segger@sha256:6cf8c29e5217b294f2b2be0d975a1e9c9732a9568ceec4e7cbd2ddcc61e2776c",
+    "tracer": "ghcr.io/imlong4real/segbench-tracer@sha256:7b1108f2082f3a10baa27e9976be0b58a27564d03f9af7bdb240b4c73361d4a5"
   },
   "containers_resolved_by_digest_in_nextflow_config": true,
   "smoke_subsets": {
