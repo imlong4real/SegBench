@@ -87,7 +87,9 @@
     "segger": {
       "version": "0.2.0",
       "commit": "ca7bf1caaf9a177dd1f3f9051f020d2e7d3937ac",
-      "container": "ghcr.io/imlong4real/segbench-segger@sha256:278cf106526c75b5304f6b6fb452b356cf8213d870348b2aaace777849e6eac2",
+      "container": "ghcr.io/imlong4real/segbench-segger@sha256:6cf8c29e5217b294f2b2be0d975a1e9c9732a9568ceec4e7cbd2ddcc61e2776c",
+      "cuda": "12.1",
+      "pixi_lock_sha256": "63e6949a7762e367060e74bf43f8526c8625c97c943d6e1737b92e3cabb54498",
       "parameters": {"epochs": 20, "upstream_defaults": true, "seed": 20260909, "deterministic_algorithms": true}
     },
     "split": {
@@ -118,9 +120,9 @@
     }
   },
   "workflow_containers": {
-    "build_commit": "1f85cb89451d045e005d42eb3ef627ec3b2cdbd5",
-    "analysis": "ghcr.io/imlong4real/segbench-analysis@sha256:c88d0959c5489b504a83e5fbc6b1c80ef242d570264a497d1bf46643b00fc6dc",
-    "segger": "ghcr.io/imlong4real/segbench-segger@sha256:278cf106526c75b5304f6b6fb452b356cf8213d870348b2aaace777849e6eac2"
+    "build_commit": "f13ecb86763f9eb6a8ddc0f69e0100b3a6a508c3",
+    "analysis": "ghcr.io/imlong4real/segbench-analysis@sha256:98985cd498937a651cb4c278d562452606c24a9bea7095d1eecd5c7fea6a42a3",
+    "segger": "ghcr.io/imlong4real/segbench-segger@sha256:6cf8c29e5217b294f2b2be0d975a1e9c9732a9568ceec4e7cbd2ddcc61e2776c"
   },
   "containers_resolved_by_digest_in_nextflow_config": true,
   "smoke_subsets": {
