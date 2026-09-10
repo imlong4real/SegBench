@@ -762,11 +762,11 @@ def _run_noseg(args, *, method: str) -> int:
         "TRACER_HOME", Path(_REPO_ROOT).parent / "TRACER")) / "src"
     platform_cfg = tracer_src / "tracer" / "configs" / "platforms" / "noseg.toml"
 
-    timer = Timer(log)
+    timer = rc.StageTimer(log)
     cmd = [sys.executable, "-m", "tracer.noseg_pipeline",
            "--visiumhd-matrix", str(matrix),
            "--spatial-dir", str(spatial),
-           "--pmi", str(pmi),
+           "--npmi", str(pmi),
            "--platform-config", str(platform_cfg),
            "--outdir", str(outdir),
            "--sample-name", str(args.sample_name),

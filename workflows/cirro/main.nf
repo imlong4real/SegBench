@@ -324,12 +324,14 @@ process BIN2CELL {
     path 'bin2cell', emit: results
     script:
     def cap = run_scope == 'smoke' ? "--max-transcripts ${smoke_bins}" : ''
+    def predictionMode = run_scope == 'smoke' ? 'direct' : 'tiled'
     def blockSize = run_scope == 'smoke' ? 512 : 4096
     """
     mkdir -p bin2cell
     python '${resource_runner}' --output bin2cell/resource_usage.json --log bin2cell/container.log \
       --requested-cpus '${task.cpus}' --requested-memory-gb '${task.memory.toGiga()}' --method bin2cell -- \
-      python '${bin2cell_runner}' --block-size '${blockSize}' -- --input-h5ad '${input_h5}' --spaceranger-dir '${spaceranger_dir}' \
+      python '${bin2cell_runner}' --prediction-mode '${predictionMode}' --block-size '${blockSize}' -- \
+      --input-h5ad '${input_h5}' --spaceranger-dir '${spaceranger_dir}' \
       --source-image '${source_image}' --outdir bin2cell --sample-name '${sample_name}' \
       --seed '${seed}' --threads '${task.cpus}' ${cap} --mpp 0.5 --prob-thresh 0.01 \
       --nms-thresh 0.5 --stardist-model 2D_versatile_he --expand-algorithm max_bin_distance \

@@ -118,7 +118,7 @@
     },
     "bin2cell": {
       "version": "0.3.4",
-      "parameters": {"mpp": 0.5, "stardist_model": "2D_versatile_he", "prob_thresh": 0.01, "nms_thresh": 0.5, "stardist_block_size_full": 4096, "expand_algorithm": "max_bin_distance", "max_bin_distance": 2, "expand_k": 4, "min_counts": 1}
+      "parameters": {"mpp": 0.5, "stardist_model": "2D_versatile_he", "prob_thresh": 0.01, "nms_thresh": 0.5, "stardist_prediction_mode_full": "tiled", "stardist_block_size_full": 4096, "expand_algorithm": "max_bin_distance", "max_bin_distance": 2, "expand_k": 4, "min_counts": 1}
     }
   },
   "workflow_containers": {
@@ -134,7 +134,7 @@
     "kidney_segmented_rows": 200000,
     "kidney_noseg_transcripts": 200000,
     "kidney_bin2cell_bins": 50000,
-    "kidney_bin2cell_stardist_block_size": 512,
+    "kidney_bin2cell_stardist_prediction_mode": "direct small-image inference; identical model, normalization, probability/NMS thresholds, and downstream expansion",
     "selection": "deterministic central spatial ROI",
     "queue_policy": "Cirro Spot queue for CPU smoke contracts; Segger GPU and every full run use Cirro on-demand"
   }
