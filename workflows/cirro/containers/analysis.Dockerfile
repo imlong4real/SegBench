@@ -18,6 +18,7 @@ RUN micromamba install -y -n base -c conda-forge -c bioconda \
       python=3.11 r-base=4.4 r-seurat=5.3.0 r-arrow=21.0.0 \
       r-optparse r-jsonlite r-dplyr r-remotes r-matrix r-anndata=0.7.5.6 \
       r-data.table r-ggplot2 r-rann r-hdf5r r-nmf r-ggrastr \
+      r-rcppparallel cmake \
       r-systemfonts r-textshaping r-ragg \
       bioconductor-biobase bioconductor-biocparallel \
       bioconductor-sparsematrixstats bioconductor-s4vectors \
