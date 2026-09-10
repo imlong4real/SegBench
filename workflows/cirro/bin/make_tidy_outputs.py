@@ -46,6 +46,7 @@ def main() -> None:
     p.add_argument("--methods-root",type=Path,required=True); p.add_argument("--dataset",required=True)
     p.add_argument("--platform",required=True); p.add_argument("--replicate",default="1")
     p.add_argument("--frozen-manifest",type=Path,required=True)
+    p.add_argument("--workflow-revision",default="unknown")
     p.add_argument("--split-manifest",type=Path); p.add_argument("--input-receipt",type=Path,required=True)
     p.add_argument("--pmi",type=Path,required=True); p.add_argument("--outdir",type=Path,required=True)
     args=p.parse_args(); args.outdir.mkdir(parents=True,exist_ok=True)
@@ -100,6 +101,7 @@ def main() -> None:
     frozen=json.loads(args.frozen_manifest.read_text())
     manifest={"schema_version":"1.0","dataset":args.dataset,"platform":args.platform,
               "replicate":args.replicate,"frozen_configuration":frozen,
+              "workflow_revision":args.workflow_revision,
               "input_receipt":json.loads(args.input_receipt.read_text()),
               "effective_pmi":{"name":args.pmi.name,"sha256":sha256(args.pmi)},
               "reference_split":(json.loads(args.split_manifest.read_text()) if args.split_manifest else None),
