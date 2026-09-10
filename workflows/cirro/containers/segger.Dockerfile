@@ -9,7 +9,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      ca-certificates curl git bzip2 procps \
+      ca-certificates curl git bzip2 procps libgl1 libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/* \
     && curl -fsSL "https://github.com/prefix-dev/pixi/releases/download/v${PIXI_VERSION}/pixi-x86_64-unknown-linux-musl.tar.gz" \
        | tar -xz -C /usr/local/bin

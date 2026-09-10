@@ -57,6 +57,7 @@ jobs:
           elif [[ "$IMAGE_NAME" == "segger" ]]; then
             docker run --rm "$IMAGE" bash -lc 'test "$(cat /opt/container-manifest/segger-commit.txt)" = "ca7bf1caaf9a177dd1f3f9051f020d2e7d3937ac"'
             docker run --rm "$IMAGE" python -c 'import importlib.metadata as m; print(m.version("segger"))'
+            docker run --rm "$IMAGE" python -c 'import cv2; print(cv2.__version__)'
           else
             docker run --rm "$IMAGE" ps --version
             docker run --rm "$IMAGE" python -c 'import tracer; print(tracer.__version__)'
