@@ -16,7 +16,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 RUN micromamba install -y -n base -c conda-forge \
       python=3.11 r-base=4.4 r-seurat=5.3.0 r-arrow=21.0.0 \
-      r-optparse r-jsonlite r-dplyr r-remotes r-matrix \
+      r-optparse r-jsonlite r-dplyr r-remotes r-matrix r-anndata \
     && micromamba clean --all --yes
 
 RUN python -m pip install \

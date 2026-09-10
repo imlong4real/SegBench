@@ -34,7 +34,8 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: docker/build-push-action@v6
+      - id: image
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: ${{ matrix.dockerfile }}
@@ -43,3 +44,14 @@ jobs:
           tags: ghcr.io/imlong4real/segbench-${{ matrix.name }}:cirro-${{ github.sha }}
           provenance: true
           sbom: true
+      - name: Container contract smoke test
+        env:
+          IMAGE: ghcr.io/imlong4real/segbench-${{ matrix.name }}:cirro-${{ github.sha }}
+          IMAGE_NAME: ${{ matrix.name }}
+        run: |
+          if [[ "$IMAGE_NAME" == "analysis" ]]; then
+            docker run --rm "$IMAGE" python -m segbench selftest
+            docker run --rm "$IMAGE" Rscript -e 'stopifnot(requireNamespace("anndata", quietly=TRUE), requireNamespace("spacexr", quietly=TRUE), requireNamespace("SPLIT", quietly=TRUE), requireNamespace("cellAdmix", quietly=TRUE))'
+          else
+            docker run --rm "$IMAGE" segger --help
+          fi
