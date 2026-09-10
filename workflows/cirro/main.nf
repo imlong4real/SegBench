@@ -11,6 +11,7 @@ def resolveDatasetPath(value, inputDir) {
     if (candidate ==~ /^[A-Za-z][A-Za-z0-9+.-]*:\/\/.*/ || candidate.startsWith('/')) return candidate
     if (inputDir == null || inputDir.toString().trim().isEmpty()) return candidate
     def base = inputDir.toString().replaceFirst('/+$', '')
+    if (candidate == '.' || candidate == './') return base
     def relative = candidate.replaceFirst('^/+', '')
     def leaf = base.tokenize('/').last()
     if (relative == leaf) relative = ''
