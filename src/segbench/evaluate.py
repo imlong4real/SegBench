@@ -159,8 +159,19 @@ def entity_metrics(row: EvalRow, stats: dict, transcripts: Path | None) -> None:
         for k in split_keys:
             if ents.get(k) is not None:
                 row.set(k, ents[k])
+    elif row.method == "tracer_seq":
+        row.set("n_reconstructed_cells", ents.get("n_entities"))
+        row.na("n_whole_cells", "no-seg emits reconstructed profiles, not whole cells")
+        row.na("n_partial_cells", "no-seg emits reconstructed profiles, not partial cells")
     elif row.method.startswith("tracer") and transcripts and Path(transcripts).exists():
         _tracer_whole_partial(row, Path(transcripts))
+    elif ents.get("n_entities") is not None:
+        row.set("n_whole_cells", ents.get("n_entities"),
+                "method emits whole/called cells only")
+        row.set("n_partial_cells", 0, "method does not emit TRACER partial entities")
+    if row.method != "tracer_seq" and "n_reconstructed_cells" not in row.values:
+        row.set("n_reconstructed_cells", 0,
+                "method does not emit no-seg reconstructed profiles")
 
 
 def _recovery_metrics(row: EvalRow, transcripts: Path | None) -> None:
@@ -458,6 +469,7 @@ def build_table(rows: list[EvalRow]) -> pd.DataFrame:
     lead = ["dataset", "method", "entity_kind", "status",
             "runtime_total_s", "runtime_method_s", "peak_rss_gb", "peak_rss_source",
             "n_entities", "n_whole_cells", "n_partial_cells",
+            "n_reconstructed_cells",
             "mean_transcripts_per_profile",
             "mean_transcripts_per_whole_cell", "mean_transcripts_per_partial_cell",
             "median_transcripts_per_entity", "median_transcripts_per_whole_cell",

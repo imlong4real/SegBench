@@ -6,7 +6,7 @@ from pathlib import Path
 import pandas as pd
 
 
-ENTITY = {"n_entities","n_whole_cells","n_partial_cells","n_partial_only_cells",
+ENTITY = {"n_entities","n_whole_cells","n_partial_cells","n_reconstructed_cells","n_partial_only_cells",
           "n_whole_and_partial_cells","n_transcripts_total","n_transcripts_assigned",
           "n_transcripts_unassigned","frac_assigned","median_transcripts_per_entity",
           "median_transcripts_per_whole_cell","median_transcripts_per_partial_cell",
@@ -58,12 +58,18 @@ def main() -> None:
             if metric in idcols or metric.endswith("_note"): continue
             note=row.get(f"{metric}_note")
             applicable=not pd.isna(value)
+            if not applicable:
+                provenance = (str(note) if isinstance(note, str)
+                              else "not emitted or structurally not applicable for this method")
+            elif metric in RCTD|REFERENCE|MARKER:
+                provenance = "held-out evaluation reference"
+            else:
+                provenance = "SegBench standardized contract"
             rows.append({"dataset":args.dataset,"platform":args.platform,"method":row.method,
                          "replicate":args.replicate,"metric":metric,
                          "value":value if applicable else "NA","unit":unit(metric),
                          "applicable":str(bool(applicable)).lower(),
-                         "provenance":("held-out evaluation reference" if metric in RCTD|REFERENCE|MARKER
-                                       else (str(note) if isinstance(note,str) else "SegBench standardized contract"))})
+                         "provenance":provenance})
     long=pd.DataFrame(rows)
     long.to_csv(args.outdir/"benchmark_summary.tsv",sep="\t",index=False)
     subset(long,ENTITY,args.outdir/"entity_summary.tsv")
