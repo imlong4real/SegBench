@@ -11,6 +11,56 @@ from __future__ import annotations
 
 import argparse
 import sys
+from pathlib import Path
+
+
+def _install_sparse_safe_insert_labels(b2c, *, chunk_size: int = 1_000_000):
+    """Install Bin2Cell 0.3.4 label insertion compatible with recent SciPy.
+
+    SciPy 1.17 returns a sparse object for paired CSR point indexing, whereas
+    Bin2Cell 0.3.4 assumes ``np.asarray(...)`` produces a numeric vector.  The
+    latter instead becomes an object array and fails when assigned to
+    ``adata.obs``.  Keep the upstream coordinate/mpp semantics, but explicitly
+    densify only the selected labels and do so in bounded chunks.
+    """
+    def sparse_safe_insert_labels(
+        adata,
+        labels_npz_path,
+        basis="spatial",
+        spatial_key="spatial",
+        mpp=None,
+        labels_key="labels",
+    ):
+        import numpy as np
+        import scipy.sparse
+
+        labels_path = Path(labels_npz_path).resolve()
+        labels_sparse = scipy.sparse.load_npz(labels_path)
+        adata.uns.setdefault("bin2cell", {}).setdefault(
+            "labels_npz_paths", {})[labels_key] = str(labels_path)
+
+        coords = np.asarray(
+            b2c.get_mpp_coords(
+                adata, basis=basis, spatial_key=spatial_key, mpp=mpp),
+            dtype=np.int64,
+        )
+        mask = (
+            (coords[:, 0] >= 0)
+            & (coords[:, 0] < labels_sparse.shape[0])
+            & (coords[:, 1] >= 0)
+            & (coords[:, 1] < labels_sparse.shape[1])
+        )
+        valid = np.flatnonzero(mask)
+        labels = np.zeros(adata.n_obs, dtype=labels_sparse.dtype)
+        for start in range(0, valid.size, chunk_size):
+            take = valid[start:start + chunk_size]
+            selected = labels_sparse[coords[take, 0], coords[take, 1]]
+            if scipy.sparse.issparse(selected):
+                selected = selected.toarray()
+            labels[take] = np.asarray(selected).reshape(-1)
+        adata.obs[labels_key] = labels
+
+    b2c.insert_labels = sparse_safe_insert_labels
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -28,6 +78,7 @@ def main(argv: list[str] | None = None) -> int:
         method_args.pop(0)
 
     import bin2cell as b2c
+    _install_sparse_safe_insert_labels(b2c)
 
     if args.prediction_mode == "direct":
         def direct_stardist(
