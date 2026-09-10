@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import argparse
+from collections import deque
 import json
 import os
 import resource
 import subprocess
+import sys
 import threading
 import time
 from pathlib import Path
@@ -110,6 +112,15 @@ def main() -> None:
         },
     }
     args.output.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
+    if rc:
+        print(f"{args.method} child command failed with exit code {rc}; "
+              f"last lines from {args.log}:", file=sys.stderr)
+        try:
+            with args.log.open(errors="replace") as failed_log:
+                for line in deque(failed_log, maxlen=200):
+                    print(line, end="", file=sys.stderr)
+        except OSError as exc:
+            print(f"unable to read child log: {exc}", file=sys.stderr)
     raise SystemExit(rc)
 
 
