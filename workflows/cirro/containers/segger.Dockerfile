@@ -17,7 +17,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN git clone https://github.com/dpeerlab/segger.git /opt/segger \
     && cd /opt/segger \
     && git checkout "${SEGGER_COMMIT}" \
-    && pixi install --locked --environment cuda121 \
+    && pixi install --frozen --environment cuda121 \
     && pixi clean cache --yes \
     && mkdir -p /opt/container-manifest \
     && git rev-parse HEAD > /opt/container-manifest/segger-commit.txt \
