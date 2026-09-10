@@ -135,6 +135,7 @@
     "kidney_noseg_transcripts": 200000,
     "kidney_bin2cell_bins": 50000,
     "kidney_bin2cell_stardist_block_size": 512,
-    "selection": "deterministic central spatial ROI"
+    "selection": "deterministic central spatial ROI",
+    "queue_policy": "Cirro Spot queue for CPU smoke contracts; Segger GPU and every full run use Cirro on-demand"
   }
 }
