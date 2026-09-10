@@ -398,7 +398,8 @@ def build_table(rows: list[EvalRow]) -> pd.DataFrame:
             "n_transcripts_total", "n_transcripts_assigned",
             "n_transcripts_unassigned", "frac_assigned",
             "rctd_entropy_median", "rctd_max_weight_median",
-            "kendall_tau_median", "marker_logfc_median",
+            "kendall_tau_median", "pearson_r_median", "spearman_rho_median",
+            "marker_logfc_median",
             "cpmi_purity", "cpmi_conflict",
             "cpmi_relative_purity", "cpmi_relative_conflict"]
     cols = [c for c in lead if c in df.columns] + \
@@ -490,28 +491,34 @@ def reference_consistency(
     row: EvalRow, *, cell_h5ad: Path, rctd_per_cell: Path,
     reference_h5ad: Path, celltype_col: str, kept_types: list[str],
 ) -> None:
-    """Kendall tau (and Pearson r) between spatial and reference pseudo-bulk.
+    """Kendall tau, Pearson r and Spearman rho between pseudo-bulk profiles.
 
     Computed per cell type over shared genes, then summarised by the median
     across types so one abundant type cannot dominate.
     """
     import anndata as ad
-    from scipy.stats import kendalltau, pearsonr
+    from scipy.stats import kendalltau, pearsonr, spearmanr
     try:
         q = ad.read_h5ad(cell_h5ad)
         r = _load_reference(reference_h5ad, q.var_names)
         lab = _rctd_labels(rctd_per_cell, q.obs_names)
     except Exception as exc:
-        row.na("kendall_tau_median", f"inputs unreadable: {exc}")
+        for key in ("kendall_tau_median", "pearson_r_median",
+                    "spearman_rho_median"):
+            row.na(key, f"inputs unreadable: {exc}")
         return
     shared = [g for g in q.var_names.astype(str) if g in set(r.var_names.astype(str))]
     if len(shared) < 20:
-        row.na("kendall_tau_median", f"only {len(shared)} shared genes")
+        for key in ("kendall_tau_median", "pearson_r_median",
+                    "spearman_rho_median"):
+            row.na(key, f"only {len(shared)} shared genes")
         return
 
     types = [t for t in kept_types if (lab == t).sum() >= 5]
     if not types:
-        row.na("kendall_tau_median", "no cell type reached 5 spatial cells")
+        for key in ("kendall_tau_median", "pearson_r_median",
+                    "spearman_rho_median"):
+            row.na(key, "no cell type reached 5 spatial cells")
         return
 
     qX = q[:, shared].X
@@ -521,22 +528,28 @@ def reference_consistency(
                      shared, types)
     common = [t for t in qb.index if t in rb.index]
     if not common:
-        row.na("kendall_tau_median", "no cell type present in both")
+        for key in ("kendall_tau_median", "pearson_r_median",
+                    "spearman_rho_median"):
+            row.na(key, "no cell type present in both")
         return
 
-    kt, pr = [], []
+    kt, pr, sr = [], [], []
     for t in common:
         a, b = qb.loc[t].to_numpy(), rb.loc[t].to_numpy()
         if np.std(a) == 0 or np.std(b) == 0:
             continue
         kt.append(float(kendalltau(a, b)[0]))
         pr.append(float(pearsonr(a, b)[0]))
+        sr.append(float(spearmanr(a, b)[0]))
     if kt:
         row.set("kendall_tau_median", float(np.nanmedian(kt)))
         row.set("pearson_r_median", float(np.nanmedian(pr)))
+        row.set("spearman_rho_median", float(np.nanmedian(sr)))
         row.set("n_celltypes_scored", len(kt))
     else:
-        row.na("kendall_tau_median", "all profiles constant")
+        for key in ("kendall_tau_median", "pearson_r_median",
+                    "spearman_rho_median"):
+            row.na(key, "all profiles constant")
 
 
 def marker_specificity(

@@ -289,6 +289,7 @@ def cmd_evaluate(args: argparse.Namespace) -> int:
         _cached = (d / "rctd" / "rctd_cell_assignments_post.tsv").exists()
         if args.skip_rctd and not _cached:
             for _k in ("rctd_entropy_median", "kendall_tau_median",
+                       "pearson_r_median", "spearman_rho_median",
                        "marker_logfc_median"):
                 row.na(_k, "RCTD not run (--skip-rctd, no cached result)")
         elif not (ref and ct_col and cell_h5ad and rscript):
@@ -297,6 +298,8 @@ def cmd_evaluate(args: argparse.Namespace) -> int:
                        "no reference/celltype column")
             row.na("rctd_entropy_median", missing)
             row.na("kendall_tau_median", missing)
+            row.na("pearson_r_median", missing)
+            row.na("spearman_rho_median", missing)
             row.na("marker_logfc_median", missing)
         else:
             rdir = d / "rctd"
@@ -360,7 +363,8 @@ def cmd_evaluate(args: argparse.Namespace) -> int:
                     row, cell_h5ad=cell_h5ad, rctd_per_cell=per_cell,
                     reference_h5ad=Path(ref), celltype_col=ct_col, kept_types=kept)
             else:
-                for k in ("kendall_tau_median", "marker_logfc_median"):
+                for k in ("kendall_tau_median", "pearson_r_median",
+                          "spearman_rho_median", "marker_logfc_median"):
                     row.na(k, "RCTD produced no per-cell table")
 
         row.set("run_dir", str(d))

@@ -1,0 +1,15 @@
+methods:
+  baysor:
+    binary: baysor
+  proseg:
+    binary: proseg
+  split:
+    rscript: Rscript
+  celladmix:
+    rscript: Rscript
+  bin2cell:
+    python: python
+  tracer:
+    python: python
+  tracer_seq:
+    python: python
