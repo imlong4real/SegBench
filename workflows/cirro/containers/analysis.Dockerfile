@@ -17,6 +17,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN micromamba install -y -n base -c conda-forge -c bioconda \
       python=3.11 r-base=4.4 r-seurat=5.3.0 r-arrow=21.0.0 \
       r-optparse r-jsonlite r-dplyr r-remotes r-matrix r-anndata=0.7.5.6 \
+      r-data.table r-ggplot2 r-rann r-hdf5r r-nmf r-ggrastr \
+      r-systemfonts r-textshaping r-ragg \
+      bioconductor-biobase bioconductor-biocparallel \
+      bioconductor-sparsematrixstats bioconductor-s4vectors \
+      bioconductor-singlecellexperiment bioconductor-rhdf5 \
+      cairo pango freetype harfbuzz fribidi libtiff pkg-config hdf5 \
     && micromamba clean --all --yes
 
 RUN python -m pip install \
@@ -26,10 +32,21 @@ RUN python -m pip install \
       fastparquet==2026.5.0 bin2cell==0.3.4 stardist==0.9.2 csbdeep==0.8.2 \
       tensorflow-cpu==2.16.2
 
-RUN Rscript -e 'options(repos=c(CRAN="https://cloud.r-project.org")); \
-  remotes::install_github("dmcable/spacexr@9f5dc33c8060f946c6072a138b70e189636e1435", dependencies=NA, upgrade="never"); \
-  remotes::install_github("bdsc-tds/SPLIT@e880e39c03a7036e11c9867701c76fdb26acc14c", dependencies=NA, upgrade="never"); \
-  remotes::install_github("kharchenkolab/cellAdmix@8cd0fdfef59f40ef7b3e77e0a03c92722a210767", dependencies=NA, upgrade="never")'
+RUN Rscript -e 'options(repos=c(CRAN="https://cloud.r-project.org"), timeout=600); \
+  install.packages("https://cran.r-project.org/src/contrib/Archive/CRF/CRF_0.4-3.tar.gz", repos=NULL, type="source"); \
+  install_gh <- function(spec, pkg) { \
+    for (attempt in seq_len(3)) { \
+      try(remotes::install_github(spec, dependencies=NA, upgrade="never"), silent=TRUE); \
+      if (requireNamespace(pkg, quietly=TRUE)) return(invisible(TRUE)); \
+      Sys.sleep(2 * attempt); \
+    }; \
+    stop(sprintf("failed to install pinned %s from %s", pkg, spec)); \
+  }; \
+  install_gh("dmcable/spacexr@9f5dc33c8060f946c6072a138b70e189636e1435", "spacexr"); \
+  install_gh("bdsc-tds/SPLIT@e880e39c03a7036e11c9867701c76fdb26acc14c", "SPLIT"); \
+  install_gh("kharchenkolab/cellAdmix@8cd0fdfef59f40ef7b3e77e0a03c92722a210767", "cellAdmix"); \
+  stopifnot(requireNamespace("CRF", quietly=TRUE), requireNamespace("spacexr", quietly=TRUE), \
+            requireNamespace("SPLIT", quietly=TRUE), requireNamespace("cellAdmix", quietly=TRUE))'
 
 COPY --from=proseg /usr/local/bin/proseg* /usr/local/bin/
 COPY . /opt/segbench
