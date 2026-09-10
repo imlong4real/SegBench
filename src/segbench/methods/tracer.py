@@ -434,6 +434,16 @@ def write_outputs(
 ) -> None:
     outputs = outdir / "outputs"
     outputs.mkdir(parents=True, exist_ok=True)
+    if "whole_partial_status" not in df_post.columns:
+        if "_etype" in df_post.columns:
+            df_post["whole_partial_status"] = df_post["_etype"].astype(str).map({
+                "cell": "whole", "partial": "partial", "component": "partial",
+                "unknown": "unassigned",
+            }).fillna("unassigned")
+        else:
+            label = resolve_label_col(df_post)
+            df_post["whole_partial_status"] = np.where(
+                df_post[label].astype(str).isin(UNASSIGNED_TOKENS), "unassigned", "whole")
     df_post.to_parquet(outputs / "transcripts_tracer_refined.parquet",
                        index=False, compression="snappy")
     adata.write_h5ad(outputs / "cell_by_gene_tracer.h5ad")
@@ -453,9 +463,12 @@ def write_outputs(
         "inputs": {
             "transcripts": str(transcripts_path),
             "transcripts_sha1": file_sha1(transcripts_path),
+            "transcripts_sha256": rc.file_sha256(transcripts_path),
             "transcripts_rows": int(len(df_post)),
             "pmi": str(panel_path),
             "pmi_sha1": file_sha1(panel_path),
+            "pmi_sha256": rc.file_sha256(panel_path),
+            "pmi_effective_path": str(Path(panel_path).resolve()),
         },
         "host": {
             "hostname": socket.gethostname(),
@@ -717,6 +730,7 @@ def _run_noseg(args, *, method: str) -> int:
     matrix = _base.require_input(args, "visiumhd_matrix", "--visiumhd-matrix")
     spatial = _base.require_input(args, "spatial_dir", "--spatial-dir")
     pmi = _base.require_input(args, "pmi", "--pmi")
+    pmi_fp = panel_fingerprint(pmi)
 
     tracer_src = Path(os.environ.get(
         "TRACER_HOME", Path(_REPO_ROOT).parent / "TRACER")) / "src"
@@ -778,7 +792,7 @@ def _run_noseg(args, *, method: str) -> int:
         sample_name=args.sample_name, timer=timer, dataset=args.dataset,
         transcripts=transcripts, entities=entities,
         qc={"mode": "noseg", "bin_size_um": float(args.bin_size_um),
-            "pmi_panel": str(pmi)},
+            "pmi_panel": str(pmi), "pmi_panel_effective": pmi_fp},
         outputs=[str(x) for x in sorted((outdir / "outputs").glob("*.parquet"))],
         notes="TRACER no-seg mode: entities are reconstructed profiles over "
               "bins, not segmented cells.")

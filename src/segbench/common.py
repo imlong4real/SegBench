@@ -56,6 +56,7 @@ REQUIRED_COLUMNS: tuple[str, ...] = ("x", "y", "feature_name", "cell_id", "metho
 OPTIONAL_COLUMNS: tuple[str, ...] = (
     "z", "transcript_id", "qv", "overlaps_nucleus",
     "original_cell_id", "assignment_confidence", "cleaned_status",
+    "whole_partial_status",
 )
 
 
@@ -85,6 +86,18 @@ def file_sha1(path: Path, chunk: int = 1 << 20) -> str:
     if not path.exists() or path.is_dir():
         return "n/a"
     h = hashlib.sha1()
+    with open(path, "rb") as f:
+        for blk in iter(lambda: f.read(chunk), b""):
+            h.update(blk)
+    return h.hexdigest()
+
+
+def file_sha256(path: Path, chunk: int = 1 << 20) -> str:
+    """SHA-256 for an immutable file input/output; directories are explicit N/A."""
+    path = Path(path)
+    if not path.exists() or path.is_dir():
+        return "n/a"
+    h = hashlib.sha256()
     with open(path, "rb") as f:
         for blk in iter(lambda: f.read(chunk), b""):
             h.update(blk)
@@ -296,6 +309,9 @@ def standardize_transcripts(
     is_unassigned = cid.isna() | cid.isin(tokens)
     out["cell_id"] = cid.astype(str)
     out.loc[is_unassigned.fillna(True).to_numpy(), "cell_id"] = "UNASSIGNED"
+    if "whole_partial_status" not in out.columns:
+        out["whole_partial_status"] = np.where(
+            out["cell_id"].eq("UNASSIGNED"), "unassigned", "whole")
 
     if "overlaps_nucleus" in out.columns:
         out["overlaps_nucleus"] = (
@@ -430,8 +446,10 @@ def write_provenance(
         "method_version": method_version,
         "inputs": inputs,
         "input_sha1": {k: file_sha1(Path(v)) for k, v in inputs.items() if v},
+        "input_sha256": {k: file_sha256(Path(v)) for k, v in inputs.items() if v},
         "outputs": outputs,
         "output_sha1": {o: file_sha1(Path(o)) for o in outputs},
+        "output_sha256": {o: file_sha256(Path(o)) for o in outputs},
         "host": {"hostname": host, **versions},
         "git_commit": git,
         "config": extra_config or {},

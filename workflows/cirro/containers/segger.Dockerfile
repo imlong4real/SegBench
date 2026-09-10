@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7
 FROM nvidia/cuda:12.1.1-cudnn8-runtime-ubuntu22.04
 
-ARG PIXI_VERSION=0.50.2
+ARG PIXI_VERSION=0.80.0
 ARG SEGGER_COMMIT=ca7bf1caaf9a177dd1f3f9051f020d2e7d3937ac
 ENV DEBIAN_FRONTEND=noninteractive \
     PATH=/opt/segger/.pixi/envs/cuda121/bin:/usr/local/bin:${PATH} \

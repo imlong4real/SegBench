@@ -72,7 +72,8 @@ def main() -> None:
     (args.outdir/"benchmark_stats.json").write_text(json.dumps(stats,indent=2)+"\n")
     receipt={"method":"Baysor","version":"0.7.1","commit":"109850599ea026b7d70c7cf96bc6de14740f827d",
              "release_artifact_sha256":"f37f02695a068fd360ade7abd0f91b07c5199a3cce6e91ded550689459fbe5c0",
-             "parameters":{"scale":8.0,"min_molecules_per_cell":50,"polygon_format":"none","seed":args.seed},
+             "parameters":{"scale":8.0,"min_molecules_per_cell":50,"polygon_format":"none",
+                           "baysor_internal_seed":1,"framework_seed":args.seed},
              "input_sha256":sha256(args.transcripts),"output_sha256":sha256(stdp)}
     (args.outdir/"config_receipt.json").write_text(json.dumps(receipt,indent=2)+"\n")
 
