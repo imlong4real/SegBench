@@ -64,6 +64,11 @@ def main() -> None:
         selection = f"{args.max_transcripts} transcripts nearest global coordinate median"
 
     args.outdir.mkdir(parents=True, exist_ok=True)
+    # The native bundle keeps Xenium's x_location/y_location names for tools
+    # that consume a Xenium directory.  SegBench wrappers all receive this
+    # second, byte-frozen table with the canonical x/y schema.
+    frame.to_parquet(args.outdir / "standardized_transcripts.parquet", index=False,
+                     compression="snappy")
     raw = frame.rename(columns={"x": "x_location", "y": "y_location", "z": "z_location"})
     raw.to_parquet(args.outdir / "transcripts.parquet", index=False, compression="snappy")
     for name in ("cells.parquet", "cell_boundaries.parquet", "nucleus_boundaries.parquet",
@@ -84,6 +89,7 @@ def main() -> None:
         "source_population_sha256": full_population_hash,
         "effective_transcript_count": int(len(frame)),
         "effective_population_sha256": population_hash(frame),
+        "effective_table_sha256": sha256(args.outdir / "standardized_transcripts.parquet"),
         "effective_gene_count": int(frame.feature_name.astype(str).nunique()),
         "qv_rule": f"verified qv > {args.qv_min}; no additional filtering",
         "control_rule": f"verified no match to {CONTROL}; no additional filtering",

@@ -127,6 +127,7 @@ def entity_metrics(row: EvalRow, stats: dict, transcripts: Path | None) -> None:
     ents, tx = stats.get("entities", {}), stats.get("transcripts", {})
     row.set("n_entities", ents.get("n_entities"))
     row.set("n_genes", ents.get("n_genes"))
+    row.set("median_transcripts_per_entity", ents.get("median_transcripts_per_entity"))
     row.set("n_transcripts_total", tx.get("n_total"))
     row.set("n_transcripts_assigned", tx.get("n_assigned"))
     row.set("n_transcripts_unassigned", tx.get("n_unassigned"))
@@ -145,7 +146,9 @@ def entity_metrics(row: EvalRow, stats: dict, transcripts: Path | None) -> None:
     split_keys = ("n_whole_cells", "n_partial_cells",
                   "n_partial_only_cells", "n_whole_and_partial_cells",
                   "mean_transcripts_per_whole_cell",
-                  "mean_transcripts_per_partial_cell")
+                  "mean_transcripts_per_partial_cell",
+                  "median_transcripts_per_whole_cell",
+                  "median_transcripts_per_partial_cell")
     if any(k in ents for k in split_keys):
         for k in split_keys:
             if ents.get(k) is not None:
@@ -186,6 +189,10 @@ def _tracer_whole_partial(row: EvalRow, transcripts: Path) -> None:
             float(len(whole)) / n_whole if n_whole else np.nan)
     row.set("mean_transcripts_per_partial_cell",
             float(len(part)) / n_part if n_part else np.nan)
+    row.set("median_transcripts_per_whole_cell",
+            float(whole.value_counts().median()) if n_whole else np.nan)
+    row.set("median_transcripts_per_partial_cell",
+            float(part.value_counts().median()) if n_part else np.nan)
 
 
 def runtime_metrics(row: EvalRow, stats: dict) -> None:
@@ -394,6 +401,8 @@ def build_table(rows: list[EvalRow]) -> pd.DataFrame:
             "n_entities", "n_whole_cells", "n_partial_cells",
             "mean_transcripts_per_profile",
             "mean_transcripts_per_whole_cell", "mean_transcripts_per_partial_cell",
+            "median_transcripts_per_entity", "median_transcripts_per_whole_cell",
+            "median_transcripts_per_partial_cell",
             "n_partial_only_cells", "n_whole_and_partial_cells",
             "n_transcripts_total", "n_transcripts_assigned",
             "n_transcripts_unassigned", "frac_assigned",

@@ -76,7 +76,11 @@ def main() -> None:
                         "frac_assigned": float(assigned.mean())},
         "entities": {"n_entities": int(result.loc[assigned, "cell_id"].nunique()),
                      "n_whole_cells": int(result.loc[assigned, "cell_id"].nunique()),
-                     "n_partial_cells": 0},
+                     "n_partial_cells": 0,
+                     "median_transcripts_per_entity": float(result.loc[assigned, "cell_id"].value_counts().median())
+                     if assigned.any() else None,
+                     "median_transcripts_per_whole_cell": float(result.loc[assigned, "cell_id"].value_counts().median())
+                     if assigned.any() else None},
         "runtime": {"total_seconds": resources.get("wall_clock_seconds"),
                     "method_seconds": resources.get("wall_clock_seconds")},
         "memory": {"peak_rss_gb": resources.get("host", {}).get("peak_rss_gb"),

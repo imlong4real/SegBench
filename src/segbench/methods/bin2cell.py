@@ -187,6 +187,23 @@ def main(argv: list[str] | None = None) -> int:
     with timer.time("load_inputs"):
         adata = _load_bins(args, log=log)
         n_bins_input = int(adata.n_obs)
+        if args.max_transcripts and adata.n_obs > args.max_transcripts:
+            # Cirro smoke tests use a spatially coherent central ROI, not a
+            # random scatter of bins. Keeping the original spatial coordinates
+            # lets Bin2Cell crop/scale the paired H&E consistently.
+            if "spatial" in adata.obsm:
+                xy = np.asarray(adata.obsm["spatial"], dtype=np.float64)
+            else:
+                xy = np.column_stack([
+                    adata.obs.get("array_col", pd.Series(np.arange(adata.n_obs))).to_numpy(),
+                    adata.obs.get("array_row", pd.Series(np.arange(adata.n_obs))).to_numpy(),
+                ]).astype(np.float64)
+            center = np.nanmedian(xy, axis=0)
+            distance = np.square(xy - center).sum(axis=1)
+            chosen = np.argpartition(distance, args.max_transcripts - 1)[:args.max_transcripts]
+            adata = adata[np.sort(chosen)].copy()
+            log.info("Cirro smoke ROI: kept %d spatially central bins from %d",
+                     adata.n_obs, n_bins_input)
         if args.min_counts and args.min_counts > 0:
             import scanpy as sc
             sc.pp.filter_cells(adata, min_counts=args.min_counts)

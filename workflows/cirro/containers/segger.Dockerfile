@@ -14,7 +14,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && curl -fsSL "https://github.com/prefix-dev/pixi/releases/download/v${PIXI_VERSION}/pixi-x86_64-unknown-linux-musl.tar.gz" \
        | tar -xz -C /usr/local/bin
 
-RUN git clone https://github.com/EliHei2/segger.git /opt/segger \
+RUN git clone https://github.com/dpeerlab/segger.git /opt/segger \
     && cd /opt/segger \
     && git checkout "${SEGGER_COMMIT}" \
     && pixi install --locked --environment cuda121 \

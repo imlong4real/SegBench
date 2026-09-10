@@ -118,6 +118,10 @@ def build_argparser() -> argparse.ArgumentParser:
     p.add_argument("--threads", type=int, default=None)
     p.add_argument("--max-transcripts", type=int, default=None,
                    help="Smoke-test helper: subsample the input to N transcripts.")
+    p.add_argument("--smoke", action="store_true",
+                   help="[tracer_seq] use the no-seg entry point's bounded spatial ROI.")
+    p.add_argument("--roi-size-um", type=float, default=500.0,
+                   help="[tracer_seq] square smoke ROI size in microns.")
     p.add_argument("--dry-run", action="store_true",
                    help="Validate inputs and config, then stop.")
     p.add_argument("--overwrite", action="store_true",
@@ -691,8 +695,10 @@ def _tracer_entity_accounting(df, *, entity_kind="cell"):
         out["median_transcripts_per_entity"] = float(assigned.value_counts().median())
     if whole.nunique():
         out["mean_transcripts_per_whole_cell"] = float(len(whole)) / whole.nunique()
+        out["median_transcripts_per_whole_cell"] = float(whole.value_counts().median())
     if part.nunique():
         out["mean_transcripts_per_partial_cell"] = float(len(part)) / part.nunique()
+        out["median_transcripts_per_partial_cell"] = float(part.value_counts().median())
     return out
 
 
@@ -731,6 +737,8 @@ def _run_noseg(args, *, method: str) -> int:
         cmd.append("--overwrite")
     if args.max_transcripts:
         cmd += ["--max-transcripts", str(args.max_transcripts)]
+    if args.smoke:
+        cmd += ["--smoke", "--roi-size-um", str(args.roi_size_um)]
 
     env = dict(os.environ)
     env["PYTHONPATH"] = str(tracer_src) + os.pathsep + env.get("PYTHONPATH", "")

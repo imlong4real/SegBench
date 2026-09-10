@@ -30,6 +30,8 @@ def main() -> None:
     p.add_argument("--segmentation",type=Path,required=True); p.add_argument("--time-file",type=Path,required=True)
     p.add_argument("--native-dir",type=Path,required=True); p.add_argument("--outdir",type=Path,required=True)
     p.add_argument("--sample-name",required=True); p.add_argument("--seed",type=int,required=True)
+    p.add_argument("--requested-cpus",type=int,required=True)
+    p.add_argument("--requested-memory-gb",type=float,required=True)
     p.add_argument("--wall-seconds",type=float,default=None); args=p.parse_args()
     from segbench.methods.baysor import standardize_baysor_segmentation
     from segbench.common import build_cell_by_gene_h5ad
@@ -43,8 +45,11 @@ def main() -> None:
         if file.is_file() and file != args.segmentation: shutil.copy2(file,native/file.name)
     resources=parse_time(args.time_file); assigned=~std.cell_id.astype(str).eq("UNASSIGNED")
     resource={"schema_version":"1.0","method":"baysor","wall_clock_seconds":args.wall_seconds,
-              "host":{"cpu_requested":None,"memory_requested_gb":None,
+              "host":{"cpu_requested":args.requested_cpus,
+                      "memory_requested_gb":args.requested_memory_gb,
                       "cpu_time_seconds":resources["user_cpu_seconds"]+resources["system_cpu_seconds"],
+                      "average_cpu_cores_used":((resources["user_cpu_seconds"]+resources["system_cpu_seconds"])/args.wall_seconds
+                                                if args.wall_seconds else None),
                       "peak_rss_gb":resources["peak_rss_gb"]},
               "gpu":{"gpu_requested":0,"model":None,"peak_vram_mb":None},
               "notes":{"peak_rss":"GNU time peak host RSS; GPU memory not applicable"}}
@@ -55,7 +60,11 @@ def main() -> None:
            "transcripts":{"n_total":int(len(std)),"n_assigned":int(assigned.sum()),
                           "n_unassigned":int((~assigned).sum()),"frac_assigned":float(assigned.mean())},
            "entities":{"n_entities":int(std.loc[assigned,"cell_id"].nunique()),
-                       "n_whole_cells":int(std.loc[assigned,"cell_id"].nunique()),"n_partial_cells":0},
+                       "n_whole_cells":int(std.loc[assigned,"cell_id"].nunique()),"n_partial_cells":0,
+                       "median_transcripts_per_entity":float(std.loc[assigned,"cell_id"].value_counts().median())
+                       if assigned.any() else None,
+                       "median_transcripts_per_whole_cell":float(std.loc[assigned,"cell_id"].value_counts().median())
+                       if assigned.any() else None},
            "runtime":{"total_seconds":args.wall_seconds,"method_seconds":args.wall_seconds},
            "memory":{"peak_rss_gb":resources["peak_rss_gb"],"source":"GNU time -v"},
            "inputs":{"transcripts":{"name":args.transcripts.name,"sha256":sha256(args.transcripts)}},
