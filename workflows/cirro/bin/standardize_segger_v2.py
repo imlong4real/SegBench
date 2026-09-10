@@ -42,9 +42,9 @@ def main() -> None:
     result["original_cell_id"] = result["cell_id"].astype(str)
     result["cell_id"] = "UNASSIGNED"
     common = result.index.intersection(pred.index)
-    valid = pd.Series(True, index=common)
+    valid = pred.loc[common, "segger_cell_id"].notna()
     if {"segger_similarity", "similarity_threshold"}.issubset(pred.columns):
-        valid = pred.loc[common, "segger_similarity"] >= pred.loc[common, "similarity_threshold"]
+        valid &= pred.loc[common, "segger_similarity"] >= pred.loc[common, "similarity_threshold"]
     selected = common[valid.to_numpy()]
     result.loc[selected, "cell_id"] = pred.loc[selected, "segger_cell_id"].astype(str).to_numpy()
     result["segmentation_method"] = "Segger"

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import gzip
 import hashlib
 import json
 import shutil
@@ -10,9 +11,12 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from scipy import sparse
+from scipy.io import mmwrite
 
 
 CONTROL = r"^(BLANK_|NegControl|Codeword|antisense_|UnassignedCodeword)"
+UNASSIGNED = {"UNASSIGNED", "-1", "0", "None", "nan", ""}
 
 
 def sha256(path: Path) -> str:
@@ -30,6 +34,62 @@ def population_hash(frame: pd.DataFrame) -> str:
         h.update(row.transcript_id.encode()); h.update(b"\t")
         h.update(row.feature_name.encode()); h.update(b"\n")
     return h.hexdigest()
+
+
+def write_smoke_matrix(frame: pd.DataFrame, source: Path, destination: Path) -> dict:
+    """Rebuild the vendor matrix from the exact smoke transcript population."""
+    features = pd.read_csv(
+        source / "features.tsv.gz", sep="\t", header=None,
+        names=["gene_id", "feature_name", "feature_type"], dtype=str,
+    )
+    with gzip.open(source / "barcodes.tsv.gz", "rt") as handle:
+        source_barcodes = [line.rstrip("\n") for line in handle]
+    source_barcode_set = set(source_barcodes)
+    assigned = frame[
+        ~frame["cell_id"].astype(str).isin(UNASSIGNED)
+        & frame["cell_id"].astype(str).isin(source_barcode_set)
+    ].copy()
+    effective_cells = set(assigned["cell_id"].astype(str))
+    barcodes = [cell for cell in source_barcodes if cell in effective_cells]
+    feature_index = {
+        name: idx for idx, name in enumerate(features["feature_name"].astype(str))
+    }
+    barcode_index = {name: idx for idx, name in enumerate(barcodes)}
+    counts = (
+        assigned.groupby(["feature_name", "cell_id"], observed=True, sort=False)
+        .size().rename("count").reset_index()
+    )
+    counts = counts[counts["feature_name"].astype(str).isin(feature_index)]
+    rows = counts["feature_name"].astype(str).map(feature_index).to_numpy(dtype=np.int64)
+    cols = counts["cell_id"].astype(str).map(barcode_index).to_numpy(dtype=np.int64)
+    values = counts["count"].to_numpy(dtype=np.int32)
+    matrix = sparse.coo_matrix(
+        (values, (rows, cols)), shape=(len(features), len(barcodes)), dtype=np.int32
+    ).tocsr()
+
+    destination.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source / "features.tsv.gz", destination / "features.tsv.gz")
+    with gzip.open(destination / "barcodes.tsv.gz", "wt") as handle:
+        handle.write("\n".join(barcodes) + "\n")
+    with gzip.open(destination / "matrix.mtx.gz", "wb") as handle:
+        mmwrite(handle, matrix, symmetry="general")
+    return {
+        "matrix_cells": len(barcodes),
+        "matrix_features": len(features),
+        "matrix_nonzero": int(matrix.nnz),
+        "matrix_total_counts": int(matrix.sum()),
+        "matrix_sha256": sha256(destination / "matrix.mtx.gz"),
+    }
+
+
+def copy_or_subset_parquet(source: Path, destination: Path, cells: set[str], subset: bool) -> None:
+    if not subset:
+        shutil.copy2(source, destination)
+        return
+    table = pd.read_parquet(source)
+    if "cell_id" in table.columns:
+        table = table[table["cell_id"].astype(str).isin(cells)].copy()
+    table.to_parquet(destination, index=False, compression="snappy")
 
 
 def main() -> None:
@@ -71,15 +131,29 @@ def main() -> None:
                      compression="snappy")
     raw = frame.rename(columns={"x": "x_location", "y": "y_location", "z": "z_location"})
     raw.to_parquet(args.outdir / "transcripts.parquet", index=False, compression="snappy")
-    for name in ("cells.parquet", "cell_boundaries.parquet", "nucleus_boundaries.parquet",
-                 "experiment.xenium", "cell_feature_matrix.h5"):
+    is_subset = bool(args.max_transcripts and full_count > args.max_transcripts)
+    effective_cells = set(frame.loc[
+        ~frame["cell_id"].astype(str).isin(UNASSIGNED), "cell_id"
+    ].astype(str))
+    for name in ("cells.parquet", "cell_boundaries.parquet", "nucleus_boundaries.parquet"):
         source = args.xenium_dir / name
         if source.exists():
-            shutil.copy2(source, args.outdir / name)
-    for name in ("cell_feature_matrix",):
-        source = args.xenium_dir / name
-        if source.exists():
-            shutil.copytree(source, args.outdir / name, dirs_exist_ok=True)
+            copy_or_subset_parquet(source, args.outdir / name, effective_cells, is_subset)
+    experiment = args.xenium_dir / "experiment.xenium"
+    if experiment.exists():
+        shutil.copy2(experiment, args.outdir / experiment.name)
+    matrix_stats = {}
+    matrix_source = args.xenium_dir / "cell_feature_matrix"
+    if matrix_source.exists():
+        if is_subset:
+            matrix_stats = write_smoke_matrix(
+                frame, matrix_source, args.outdir / "cell_feature_matrix"
+            )
+        else:
+            shutil.copytree(matrix_source, args.outdir / matrix_source.name, dirs_exist_ok=True)
+    matrix_h5 = args.xenium_dir / "cell_feature_matrix.h5"
+    if matrix_h5.exists() and not is_subset:
+        shutil.copy2(matrix_h5, args.outdir / matrix_h5.name)
 
     receipt = {
         "schema_version": "1.0",
@@ -94,8 +168,11 @@ def main() -> None:
         "qv_rule": f"verified qv > {args.qv_min}; no additional filtering",
         "control_rule": f"verified no match to {CONTROL}; no additional filtering",
         "selection": selection,
-        "unassigned_count": int(frame.cell_id.astype(str).isin(
-            ["UNASSIGNED", "-1", "0", "None", "nan", ""]).sum()),
+        "unassigned_count": int(frame.cell_id.astype(str).isin(UNASSIGNED).sum()),
+        "effective_assigned_cell_count": len(effective_cells),
+        "support_bundle_mode": "effective subset rebuilt from exact transcripts" if is_subset
+                               else "source files copied without modification",
+        **matrix_stats,
     }
     (args.outdir / "frozen_input_receipt.json").write_text(
         json.dumps(receipt, indent=2, sort_keys=True) + "\n")

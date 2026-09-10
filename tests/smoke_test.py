@@ -263,6 +263,42 @@ def test_no_undefined_names() -> None:
               f"undefined: {missing}")
 
 
+def test_evaluation_contracts(tmp: Path) -> None:
+    print("\n[9] recovery and TRACER coherence metrics")
+    from segbench import evaluate as ev
+
+    run = tmp / "eval_fixture"
+    (run / "outputs").mkdir(parents=True)
+    tx = pd.DataFrame({
+        "original_cell_id": ["-1", "-1", "c0", "c0"],
+        "cell_id": ["c1", "-1", "c0", "c0"],
+        "_etype": ["partial", "unknown", "cell", "cell"],
+    })
+    tx_path = run / "outputs" / "transcripts_fixture_standardized.parquet"
+    tx.to_parquet(tx_path, index=False)
+    row = ev.EvalRow(dataset="fixture", method="tracer")
+    ev.entity_metrics(row, {
+        "entities": {"n_entities": 2},
+        "transcripts": {"n_total": 4, "n_assigned": 3,
+                        "n_unassigned": 1, "frac_assigned": 0.75},
+    }, tx_path)
+    check("assignment percent is explicit", row.values["assignment_percent"] == 75.0)
+    check("recovery uses initially-unassigned denominator",
+          row.values["n_transcripts_recovered"] == 1
+          and row.values["recovery_percent"] == 50.0)
+
+    pd.DataFrame({
+        "purity_score": [0.9, 0.5], "conflict_score": [0.1, 0.3],
+        "relative_purity": [0.8, 0.4], "relative_conflict": [0.2, 0.1],
+    }).to_csv(run / "outputs" / "cell_scores.tsv.gz", sep="\t", index=False,
+              compression="gzip")
+    ev.tracer_conflict_purity(row, run)
+    check("coherence is median of per-entity purity minus conflict",
+          abs(row.values["cpmi_coherence"] - 0.5) < 1e-12)
+    check("relative coherence is emitted",
+          abs(row.values["cpmi_relative_coherence"] - 0.45) < 1e-12)
+
+
 
 def main() -> int:
     tmp = Path(tempfile.mkdtemp(prefix="segbench_smoke_"))
@@ -279,6 +315,7 @@ def main() -> int:
         test_dry_runs(tmp)
         test_missing_tool_message(tmp)
         test_no_undefined_names()
+        test_evaluation_contracts(tmp)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 

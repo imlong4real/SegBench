@@ -573,6 +573,12 @@ def main(argv: list[str] | None = None, method: str | None = None) -> int:
 
     with timer.time("load_transcripts"):
         df = load_transcripts(args.transcripts, log)
+        # Keep the incoming assignment explicit. TRACER uses cell_id as a
+        # parent identifier and tracer_id as the refined entity identifier;
+        # this copy makes recovery of initially-unassigned transcripts
+        # auditable after the run.
+        if "original_cell_id" not in df.columns:
+            df["original_cell_id"] = df["cell_id"].astype(str)
     with timer.time("load_pmi"):
         requested_pmi = Path(args.pmi).resolve() if args.pmi else None
         panel = load_npmi_panel(args.pmi, log)
@@ -593,6 +599,17 @@ def main(argv: list[str] | None = None, method: str | None = None) -> int:
             pmi_threshold_override=args.pmi_threshold,
             log=log,
         )
+        if "original_cell_id" not in df_post.columns:
+            if "transcript_id" not in df.columns or "transcript_id" not in df_post.columns:
+                raise SystemExit(
+                    "TRACER output dropped original_cell_id and has no transcript_id "
+                    "key for a provenance-safe recovery join.")
+            original = (
+                df[["transcript_id", "original_cell_id"]]
+                .drop_duplicates("transcript_id", keep="first")
+            )
+            df_post = df_post.merge(
+                original, on="transcript_id", how="left", validate="many_to_one")
     with timer.time("build_outputs"):
         scores, adata = build_outputs(
             df_post, npmi_panel=panel, log=log,
@@ -684,22 +701,20 @@ def _tracer_entity_accounting(df, *, entity_kind="cell"):
     methods that emit only whole cells.
     """
     out = {"entity_kind": entity_kind}
-    if "_etype" not in df.columns or "cell_id" not in df.columns:
+    if "_etype" not in df.columns or _entity_id_col(df) not in df.columns:
         return stx.entity_accounting(df, cell_col=resolve_label_col(df),
                                      entity_kind=entity_kind)
     et = df["_etype"].astype(str)
-    cid = df["cell_id"].astype(str)
+    cid = df[_entity_id_col(df)].astype(str)
     whole, part = cid[et == "cell"], cid[et == "partial"]
     assigned = cid[et.isin(_ASSIGNED_ETYPES)]
     whole_ids, part_ids = set(whole.unique()), set(part.unique())
     out["n_entities"] = int(assigned.nunique())
     out["n_whole_cells"] = len(whole_ids)
     out["n_partial_cells"] = len(part_ids)
-    # `_etype` is per TRANSCRIPT, so one cell_id can carry both whole and
-    # partial transcripts — on the kidney run 45,434 of 45,462 partial ids are
-    # also whole ids. The two counts therefore OVERLAP and must not be summed.
-    # n_partial_only_cells is the disjoint quantity: entities that are nothing
-    # but fragments.
+    # tracer_id is a unique refined entity key, so whole and partial counts are
+    # disjoint. Keep the overlap fields for backward-compatible tables and to
+    # make an unexpected ID collision visible.
     out["n_partial_only_cells"] = len(part_ids - whole_ids)
     out["n_whole_and_partial_cells"] = len(whole_ids & part_ids)
     if "feature_name" in df.columns:
@@ -713,6 +728,17 @@ def _tracer_entity_accounting(df, *, entity_kind="cell"):
         out["mean_transcripts_per_partial_cell"] = float(len(part)) / part.nunique()
         out["median_transcripts_per_partial_cell"] = float(part.value_counts().median())
     return out
+
+
+def _path_sha256_inventory(path: Path) -> dict[str, str]:
+    """Hash a file or the regular files under a small dataset directory."""
+    path = Path(path)
+    if path.is_file():
+        return {path.name: rc.file_sha256(path)}
+    return {
+        child.relative_to(path).as_posix(): rc.file_sha256(child)
+        for child in sorted(path.rglob("*")) if child.is_file()
+    }
 
 
 def _run_noseg(args, *, method: str) -> int:
@@ -786,6 +812,56 @@ def _run_noseg(args, *, method: str) -> int:
                 "n_input": int(len(pid)),
                 "delta_vs_input": 0,
             }
+            # Emit the same row-level contract as the other methods while
+            # retaining TRACER's richer native no-seg tables alongside it.
+            standardized = pd.DataFrame({
+                "x": pd.to_numeric(a.get("x"), errors="coerce").astype("float32"),
+                "y": pd.to_numeric(a.get("y"), errors="coerce").astype("float32"),
+                "feature_name": "__bin__",
+                "cell_id": pid.where(~pid.isin(("-1", "UNASSIGNED", "nan", "")),
+                                     "UNASSIGNED"),
+                "method": "TRACER No-seg",
+                "transcript_id": a.get("bin_id", a.index.astype(str)).astype(str),
+                "whole_partial_status": np.where(
+                    pid.isin(("-1", "UNASSIGNED", "nan", "")),
+                    "unassigned", "reconstructed"),
+            })
+            if "n_tx_in_bin" in a.columns:
+                standardized["n_tx_in_bin"] = pd.to_numeric(
+                    a["n_tx_in_bin"], errors="coerce").astype("float32")
+            standardized_path = outdir / "outputs" / "tracer_noseg_bin_assignments_standardized.parquet"
+            standardized.to_parquet(standardized_path, index=False, compression="snappy")
+
+    platform_config = Path(platform_cfg).resolve()
+    receipt = {
+        "method": "TRACER No-seg",
+        "tracer_commit": "ee259003be572581c434dd5bed40d7568f05f906",
+        "command": " ".join(sys.argv),
+        "args": {k: str(v) if isinstance(v, Path) else v for k, v in vars(args).items()},
+        "resolved_config": {
+            "platform_config": str(platform_config),
+            "platform_config_sha256": rc.file_sha256(platform_config),
+            "bin_size_um": float(args.bin_size_um),
+            "seed": int(args.seed),
+            "threads": int(args.threads or 8),
+            "smoke": bool(args.smoke),
+            "roi_size_um": float(args.roi_size_um),
+            "max_transcripts": args.max_transcripts,
+        },
+        "inputs": {
+            "visiumhd_matrix": str(matrix.resolve()),
+            "visiumhd_matrix_sha256": _path_sha256_inventory(matrix),
+            "spatial_dir": str(spatial.resolve()),
+            "spatial_dir_sha256": _path_sha256_inventory(spatial),
+            "pmi_effective": pmi_fp,
+        },
+        "outputs": {
+            child.relative_to(outdir).as_posix(): rc.file_sha256(child)
+            for child in sorted((outdir / "outputs").rglob("*")) if child.is_file()
+        },
+    }
+    (outdir / "config_receipt.json").write_text(
+        json.dumps(receipt, indent=2, sort_keys=True) + "\n")
 
     stx.write_benchmark_stats(
         outdir=outdir, method=method, modality="sequencing",

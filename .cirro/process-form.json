@@ -1,0 +1,35 @@
+{
+  "form": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:segbench:cirro:form:0.1.0-cirro.1",
+    "title": "SegBench: Lung Xenium / Kidney VisiumHD",
+    "description": "Run the frozen method set and held-out evaluation. Keep Run scope = smoke until every output contract passes.",
+    "type": "object",
+    "properties": {
+      "dataset_kind": {"type": "string", "enum": ["xenium_lung", "kidney_visiumhd"], "title": "Benchmark dataset", "description": "Lung runs six Xenium methods; kidney runs TRACER Seg/No-seg and Bin2Cell."},
+      "sample_name": {"type": "string", "default": "segbench_sample", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$", "title": "Sample name", "description": "Short label written into every receipt."},
+      "run_scope": {"type": "string", "enum": ["smoke", "full"], "default": "smoke", "title": "Run scope", "description": "Smoke uses frozen central subsets. Use full only after both smoke workflows pass."},
+      "seed": {"type": "integer", "const": 20260909, "default": 20260909, "title": "Frozen seed", "description": "Locked analysis seed. Baysor v0.7.1 uses its hard-coded internal seed 1."},
+      "input_manifest": {"type": "string", "pathType": "dataset", "file": "**/input_manifest.json", "title": "Input checksum manifest", "description": "SHA-256 manifest stored with the selected source dataset."},
+      "transcripts": {"type": "string", "pathType": "dataset", "file": "**/*.parquet", "default": "filtered_df_standardized.parquet", "title": "Lung transcripts", "description": "TSU-20 frozen QV>20/control-free table; lung only."},
+      "xenium_dir": {"type": "string", "default": ".", "title": "Xenium bundle folder", "description": "Dataset-relative folder containing Xenium support files; lung only."},
+      "clusters": {"type": "string", "pathType": "dataset", "file": "**/clusters.csv", "default": "analysis/clustering/gene_expression_graphclust/clusters.csv", "title": "Xenium clusters", "description": "Vendor cluster labels; lung only."},
+      "kidney_seg_input": {"type": "string", "pathType": "dataset", "file": "**/*seg_input.parquet", "default": "kidney_seg_input.parquet", "title": "Kidney nucleus assignments", "description": "Frozen bin/transcript table built from the provided nucleus segmentation; kidney only."},
+      "visiumhd_matrix": {"type": "string", "default": "square_002um/filtered_feature_bc_matrix", "title": "VisiumHD matrix folder", "description": "Dataset-relative Matrix Market folder for TRACER No-seg; kidney only."},
+      "spatial_dir": {"type": "string", "default": "square_002um/spatial", "title": "Spatial folder", "description": "Dataset-relative Space Ranger spatial folder; kidney only."},
+      "bin2cell_h5": {"type": "string", "pathType": "dataset", "file": "**/filtered_feature_bc_matrix.h5", "default": "square_002um/filtered_feature_bc_matrix.h5", "title": "Bin2Cell matrix", "description": "Filtered 2-um HDF5 matrix; kidney only."},
+      "spaceranger_dir": {"type": "string", "default": "square_002um", "title": "Space Ranger 2-um folder", "description": "Folder containing matrix and spatial files; kidney only."},
+      "source_image": {"type": "string", "pathType": "dataset", "file": "**/*.btf", "default": "Visium_HD_Human_Kidney_FFPE_tissue_image.btf", "title": "Kidney H&E image", "description": "Full-resolution H&E segmented by the image-baked StarDist model; kidney only."},
+      "pmi": {"type": "string", "pathType": "dataset", "file": "**/*pmi*.csv*", "title": "PMI/cPMI reference", "description": "Required platform-matched panel in the immutable Cirro input package. Effective path and SHA-256 are recorded."},
+      "reference_train": {"type": "string", "pathType": "dataset", "file": "**/*reference_train.h5ad", "default": "references/lung_reference_train.h5ad", "title": "Lung training reference", "description": "Training-only scRNA split staged only into SPLIT/common-input tasks; lung only."},
+      "reference_holdout": {"type": "string", "pathType": "dataset", "file": "**/*.h5ad", "title": "Held-out evaluation reference", "description": "Staged only into the evaluator; the same holdout evaluates every applicable method."},
+      "reference_split_manifest": {"type": "string", "pathType": "dataset", "file": "**/*split_manifest.json", "default": "references/lung_reference_split_manifest.json", "title": "Lung split manifest", "description": "Frozen train/holdout membership and hashes; lung only."},
+      "max_retries": {"type": "integer", "minimum": 0, "maximum": 3, "default": 2, "title": "OOM/transient retries", "description": "Selected exits retry with attempt-scaled memory."},
+      "max_memory_gb": {"type": "integer", "minimum": 192, "maximum": 512, "default": 384, "title": "Retry memory cap (GiB)", "description": "Upper bound for large tasks."}
+    },
+    "required": ["dataset_kind", "sample_name", "run_scope", "input_manifest", "pmi", "reference_holdout"]
+  },
+  "ui": {
+    "ui:order": ["dataset_kind", "sample_name", "run_scope", "seed", "input_manifest", "transcripts", "xenium_dir", "clusters", "kidney_seg_input", "visiumhd_matrix", "spatial_dir", "bin2cell_h5", "spaceranger_dir", "source_image", "pmi", "reference_train", "reference_holdout", "reference_split_manifest", "max_retries", "max_memory_gb"]
+  }
+}

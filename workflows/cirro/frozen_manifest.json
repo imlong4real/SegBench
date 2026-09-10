@@ -1,0 +1,133 @@
+{
+  "schema_version": "1.0",
+  "release": "0.1.0-cirro.1",
+  "freeze_date_utc": "2026-09-10",
+  "seed": 20260909,
+  "policy": {
+    "method_tuning_after_holdout_metrics": "prohibited",
+    "production_gate": "all Cirro method and evaluation smoke tests must pass and agree with local contracts",
+    "input_population": "one frozen effective input per platform; no method-specific QV or control-probe filtering",
+    "not_applicable_values": "literal NA with an explanatory provenance note; never imputed"
+  },
+  "lung": {
+    "dataset": "TSU-20",
+    "platform": "Xenium",
+    "effective_input": {
+      "name": "filtered_df_standardized.parquet",
+      "sha256": "c95693aebabad66d58d7140c19d17af144b8a1a327026c45c9a92e9fbfc62e7e",
+      "rows": 1552421,
+      "genes": 302,
+      "filter": "qv > 20; no Xenium control/non-gene probes",
+      "population_sha256_recorded_per_run": true
+    },
+    "cirro_input_manifest_sha256": "7a04fd1591cda8247b29411da7eea7449f1847e65e65b725a133534e0de28951",
+    "reference_split": {
+      "algorithm": "per-stratum lexicographic order followed by PCG64 permutation",
+      "celltype_column": "Cell_Cluster_level1",
+      "holdout_fraction": 0.2,
+      "assignment_sha256": "c98ffc5dd24b0c3088487d17219a78ec40f1fc6b7ba9c193db67c6133e078801",
+      "train_cells": 40001,
+      "train_sha256": "8c0f47c056591d61801e4d529fca69728ded0869ebf10f837f4192bd287dc4b4",
+      "holdout_cells": 9999,
+      "holdout_sha256": "e0d23078b4734fa082be4c1cc67649b0b0ff97cc531a7a0586495c777a6f3279",
+      "holdout_access": "evaluation only; never passed to SPLIT or the PMI builder"
+    },
+    "cpmi_builder": {
+      "repository": "imlong4real/TRACER",
+      "branch": "feat/lung-panel-builders",
+      "commit": "9a6b078b9127c1f87e591ace5f935e00cde4d7da",
+      "parameters": {
+        "strategy": "rep",
+        "presence_arm": "xgt1",
+        "estimator_promoted_to_PMI": "cPMI",
+        "seed": 20260909,
+        "min_detection_cells_on_unique_draw": 25,
+        "depth_bins": 25,
+        "depth_metric": "full-library total_counts"
+      },
+      "panel_sha256": "55bcd5206f9711f323ce48854b4c70d0abca8b42b3d2b8a6d24552bd134652d8",
+      "panel_edges": 39354,
+      "panel_genes": 291
+    }
+  },
+  "kidney": {
+    "dataset": "10x Genomics VisiumHD human kidney FFPE",
+    "platform": "VisiumHD",
+    "segmented_input": {
+      "name": "kidney_seg_input.parquet",
+      "sha256": "f373db79dc6c204aeb36ce43d2b119da922ad64894d228243622c8f4b8d3c3cf",
+      "rows": 13155072,
+      "genes": 1656,
+      "provided_nucleus_segmentation": "graphclust_annotated_nucleus_segmentations.geojson"
+    },
+    "source_nucleus_segmentation_sha256": "7f5376cbeeb9f57d114f2c763f311a87cdbeb4da5ebd1f95c4dae41fa24c6391",
+    "source_he_image_sha256": "7c5ecbe041ccaee18172ce42964b07f1bd30f533849ceeb300f38291ceb00ff5",
+    "cirro_input_manifest_sha256": "04faedc8e7e747ee41c9379be7918f818e22b63d8befc47f1a900a34833a7c28",
+    "pmi_sha256": "71c8d5a57eaf29901986b5a48bffc5fd36465f67b9311d883adcfd59427e8426",
+    "evaluation_reference": {
+      "name": "kidney_reference_harmonized.h5ad",
+      "sha256": "7339c3f418bff123f63d8828f534645f0c75c48fc59e767d0b0149a7f6018e81",
+      "celltype_column": "lineage"
+    },
+    "raw_reference_source": "TRACER/datasets/kidney_scrna_Naik"
+  },
+  "methods": {
+    "baysor": {
+      "version": "0.7.1",
+      "commit": "109850599ea026b7d70c7cf96bc6de14740f827d",
+      "container": "quay.io/biocontainers/baysor@sha256:4bd9546d1e63ce8e4b052faac1df0ce76f0ca1305802bd9fba8760f5cdf3ec7b",
+      "parameters": {"scale": 8.0, "min_molecules_per_cell": 50, "polygon_format": "none", "internal_seed": 1}
+    },
+    "proseg": {
+      "version": "3.2.0",
+      "commit": "e7df1eace923ce4c6ec70b2c597c5d126aa3db88",
+      "upstream_container": "ghcr.io/dcjones/proseg@sha256:7daa31a81107ed8b7a65f14b61bec0e71c8f05b620ece1ffd7fe0b72bd83cfdb",
+      "parameters": {"threads": 32, "voxel_layers": 4}
+    },
+    "segger": {
+      "version": "0.2.0",
+      "commit": "ca7bf1caaf9a177dd1f3f9051f020d2e7d3937ac",
+      "container": "ghcr.io/imlong4real/segbench-segger@sha256:278cf106526c75b5304f6b6fb452b356cf8213d870348b2aaace777849e6eac2",
+      "parameters": {"epochs": 20, "upstream_defaults": true, "seed": 20260909, "deterministic_algorithms": true}
+    },
+    "split": {
+      "version": "0.3.0",
+      "commit": "e880e39c03a7036e11c9867701c76fdb26acc14c",
+      "parameters": {"umi_min": 10, "counts_min": 10, "threads": 32, "reference": "reference_train only"}
+    },
+    "celladmix": {
+      "version": "0.1.0",
+      "commit": "8cd0fdfef59f40ef7b3e77e0a03c92722a210767",
+      "parameters": {"num_factors": 10, "nmol_dsamp": 10000, "n_cells_nmf": 2000, "bridge_cells": 200, "threads": 32}
+    },
+    "spacexr_rctd": {
+      "version": "2.2.1",
+      "commit": "9f5dc33c8060f946c6072a138b70e189636e1435",
+      "parameters": {"doublet_mode": "doublet", "min_reference_cells": 50, "same_holdout_for_all_methods": true}
+    },
+    "tracer": {
+      "version": "0.1.1",
+      "commit": "ee259003be572581c434dd5bed40d7568f05f906",
+      "container": "ghcr.io/imlong4real/tracer@sha256:1ab4e0b2704fad56237fb4a9099c4ecbd1d83c71a52b3738386e5fafca90d282",
+      "seg_parameters": {"platform": "xenium", "tau": 0.05, "min_tx_per_cell_for_scores": 5, "threads": 32, "seed": 20260909},
+      "noseg_parameters": {"bin_size_um": 2, "threads": 32, "seed": 20260909}
+    },
+    "bin2cell": {
+      "version": "0.3.4",
+      "parameters": {"mpp": 0.5, "stardist_model": "2D_versatile_he", "prob_thresh": 0.01, "nms_thresh": 0.5, "expand_algorithm": "max_bin_distance", "max_bin_distance": 2, "expand_k": 4, "min_counts": 1}
+    }
+  },
+  "workflow_containers": {
+    "build_commit": "1f85cb89451d045e005d42eb3ef627ec3b2cdbd5",
+    "analysis": "ghcr.io/imlong4real/segbench-analysis@sha256:c88d0959c5489b504a83e5fbc6b1c80ef242d570264a497d1bf46643b00fc6dc",
+    "segger": "ghcr.io/imlong4real/segbench-segger@sha256:278cf106526c75b5304f6b6fb452b356cf8213d870348b2aaace777849e6eac2"
+  },
+  "containers_resolved_by_digest_in_nextflow_config": true,
+  "smoke_subsets": {
+    "lung_transcripts": 100000,
+    "kidney_segmented_rows": 200000,
+    "kidney_noseg_transcripts": 200000,
+    "kidney_bin2cell_bins": 50000,
+    "selection": "deterministic central spatial ROI"
+  }
+}

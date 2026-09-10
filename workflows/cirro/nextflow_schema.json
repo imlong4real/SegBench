@@ -1,0 +1,116 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:segbench:cirro:0.1.0-cirro.1",
+  "title": "SegBench (Lung Xenium / Kidney VisiumHD)",
+  "description": "Frozen, held-out benchmarking with pinned method containers and manuscript-ready outputs.",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "dataset_kind": {
+      "type": "string",
+      "enum": ["xenium_lung", "kidney_visiumhd"],
+      "title": "Benchmark dataset",
+      "description": "Select the lung Xenium or kidney VisiumHD method set."
+    },
+    "sample_name": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+      "default": "segbench_sample",
+      "title": "Sample name",
+      "description": "Short run label used in result receipts."
+    },
+    "run_scope": {
+      "type": "string",
+      "enum": ["smoke", "full"],
+      "default": "smoke",
+      "title": "Run scope",
+      "description": "Smoke uses a fixed central subset; full uses the frozen complete input."
+    },
+    "seed": {
+      "type": "integer",
+      "const": 20260909,
+      "default": 20260909,
+      "title": "Frozen seed",
+      "description": "Locked benchmark seed; Baysor v0.7.1 internally fixes its own seed to 1."
+    },
+    "transcripts": {
+      "type": "string", "format": "file-path", "pathType": "dataset",
+      "file": "**/*.parquet", "title": "Lung transcript table",
+      "description": "Frozen QV>20/control-free TSU-20 standardized Parquet."
+    },
+    "xenium_dir": {
+      "type": "string", "default": ".", "title": "Xenium bundle folder",
+      "description": "Dataset-relative folder containing Xenium boundaries, cells and matrix files."
+    },
+    "clusters": {
+      "type": "string", "format": "file-path", "pathType": "dataset",
+      "file": "**/clusters.csv", "title": "Xenium cluster labels",
+      "description": "Vendor cluster labels used by the frozen CellAdmix/common-input adapter."
+    },
+    "kidney_seg_input": {
+      "type": "string", "format": "file-path", "pathType": "dataset",
+      "file": "**/*seg_input.parquet", "title": "Kidney nucleus assignments",
+      "description": "Frozen 2-um bin table assigned by the provided nucleus segmentation."
+    },
+    "visiumhd_matrix": {
+      "type": "string", "title": "VisiumHD matrix folder",
+      "description": "Dataset-relative filtered 2-um Matrix Market folder for TRACER No-seg."
+    },
+    "spatial_dir": {
+      "type": "string", "title": "VisiumHD spatial folder",
+      "description": "Dataset-relative Space Ranger spatial folder."
+    },
+    "bin2cell_h5": {
+      "type": "string", "format": "file-path", "pathType": "dataset",
+      "file": "**/filtered_feature_bc_matrix.h5", "title": "Bin2Cell matrix",
+      "description": "Filtered 2-um HDF5 matrix from the same kidney Space Ranger output."
+    },
+    "spaceranger_dir": {
+      "type": "string", "title": "Space Ranger 2-um folder",
+      "description": "Dataset-relative square_002um folder used by Bin2Cell."
+    },
+    "source_image": {
+      "type": "string", "format": "file-path", "pathType": "dataset",
+      "file": "**/*.{tif,tiff,btf}", "title": "Kidney H&E image",
+      "description": "Full-resolution H&E image segmented by the baked StarDist model."
+    },
+    "input_manifest": {
+      "type": "string", "format": "file-path", "pathType": "dataset",
+      "file": "**/input_manifest.json", "title": "Input checksum manifest",
+      "description": "SHA-256 inventory for every file in the selected Cirro dataset."
+    },
+    "pmi": {
+      "type": "string", "format": "file-path", "pathType": "dataset",
+      "file": "**/*pmi*.csv*", "title": "PMI/cPMI reference",
+      "description": "Required immutable PMI/cPMI table; effective path and SHA-256 are recorded."
+    },
+    "reference_train": {
+      "type": "string", "format": "file-path", "pathType": "dataset",
+      "file": "**/*reference_train.h5ad", "title": "Lung training reference",
+      "description": "Training-only stratified scRNA subset available to SPLIT."
+    },
+    "reference_holdout": {
+      "type": "string", "format": "file-path", "pathType": "dataset",
+      "file": "**/*.h5ad", "title": "Held-out evaluation reference",
+      "description": "Never exposed to SPLIT; the same object evaluates every applicable method."
+    },
+    "reference_split_manifest": {
+      "type": "string", "format": "file-path", "pathType": "dataset",
+      "file": "**/*split_manifest.json", "title": "Reference split receipt",
+      "description": "Frozen membership, strata, source hash and train/holdout hashes."
+    },
+    "max_retries": {
+      "type": "integer", "minimum": 0, "maximum": 3, "default": 2,
+      "title": "OOM/transient retries", "description": "Retries selected OOM/transient exits with scaled memory."
+    },
+    "max_memory_gb": {
+      "type": "integer", "minimum": 192, "maximum": 512, "default": 384,
+      "title": "Retry memory cap (GiB)", "description": "Upper bound for task-attempt memory scaling."
+    },
+    "outdir": {
+      "type": "string", "format": "directory-path", "default": "results",
+      "title": "Output directory", "description": "Cirro replaces this with the destination dataset path."
+    }
+  },
+  "required": ["dataset_kind", "sample_name", "run_scope", "input_manifest", "pmi", "reference_holdout"]
+}

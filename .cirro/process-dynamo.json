@@ -1,0 +1,15 @@
+{
+  "id": "segbench-0-1-0-cirro",
+  "name": "SegBench: Lung Xenium / Kidney VisiumHD",
+  "desc": "Frozen multi-method segmentation benchmarking with held-out evaluation and plot-ready outputs",
+  "executor": "NEXTFLOW",
+  "parentProcessIds": ["custom_dataset"],
+  "childProcessIds": [],
+  "documentationUrl": "https://github.com/imlong4real/SegBench/tree/feat/cirro-segbench-v0.1.0/workflows/cirro",
+  "code": {
+    "repository": "GITHUBPUBLIC",
+    "uri": "imlong4real/SegBench",
+    "version": "__GIT_COMMIT__",
+    "script": "workflows/cirro/main.nf"
+  }
+}

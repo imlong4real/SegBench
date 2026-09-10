@@ -11,12 +11,14 @@ ENTITY = {"n_entities","n_whole_cells","n_partial_cells","n_partial_only_cells",
           "n_transcripts_unassigned","frac_assigned","median_transcripts_per_entity",
           "median_transcripts_per_whole_cell","median_transcripts_per_partial_cell",
           "mean_transcripts_per_profile","mean_transcripts_per_whole_cell",
-          "mean_transcripts_per_partial_cell"}
+          "mean_transcripts_per_partial_cell","assignment_percent",
+          "n_transcripts_initially_unassigned","n_transcripts_recovered","recovery_percent"}
 RESOURCE = {"runtime_total_s","runtime_method_s","peak_rss_gb","peak_rss_source"}
 RCTD = {"rctd_entropy_median","rctd_max_weight_median","rctd_n_cells_scored","rctd_status"}
 REFERENCE = {"kendall_tau_median","pearson_r_median","spearman_rho_median","n_celltypes_scored"}
 MARKER = {"marker_logfc_median","n_marker_celltypes"}
-TRACER = {"cpmi_purity","cpmi_conflict","cpmi_relative_purity","cpmi_relative_conflict"}
+TRACER = {"cpmi_purity","cpmi_conflict","cpmi_coherence","cpmi_relative_purity",
+          "cpmi_relative_conflict","cpmi_relative_coherence"}
 
 
 def sha256(path: Path) -> str:
@@ -30,7 +32,8 @@ def unit(metric: str) -> str:
     if metric.endswith("_s") or metric.endswith("seconds"): return "seconds"
     if metric.endswith("_gb"): return "GiB"
     if metric.startswith("n_"): return "count"
-    if "frac" in metric or metric.endswith("percent"): return "fraction"
+    if metric.endswith("percent"): return "percent"
+    if "frac" in metric: return "fraction"
     return "unitless"
 
 

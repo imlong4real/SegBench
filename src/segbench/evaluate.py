@@ -132,6 +132,12 @@ def entity_metrics(row: EvalRow, stats: dict, transcripts: Path | None) -> None:
     row.set("n_transcripts_assigned", tx.get("n_assigned"))
     row.set("n_transcripts_unassigned", tx.get("n_unassigned"))
     row.set("frac_assigned", tx.get("frac_assigned"))
+    if tx.get("frac_assigned") is not None:
+        row.set("assignment_percent", 100.0 * float(tx["frac_assigned"]))
+    else:
+        row.na("assignment_percent", "method has no transcript/bin-level assignment")
+
+    _recovery_metrics(row, transcripts)
 
     n_assigned, n_ent = tx.get("n_assigned"), ents.get("n_entities")
     if n_assigned and n_ent:
@@ -155,6 +161,41 @@ def entity_metrics(row: EvalRow, stats: dict, transcripts: Path | None) -> None:
                 row.set(k, ents[k])
     elif row.method.startswith("tracer") and transcripts and Path(transcripts).exists():
         _tracer_whole_partial(row, Path(transcripts))
+
+
+def _recovery_metrics(row: EvalRow, transcripts: Path | None) -> None:
+    """Fraction of initially unassigned rows that receive an entity assignment."""
+    if transcripts is None or not Path(transcripts).exists():
+        row.na("n_transcripts_recovered", "no per-transcript/bin assignment table")
+        row.na("recovery_percent", "no per-transcript/bin assignment table")
+        return
+    try:
+        import pyarrow.parquet as pq
+        names = set(pq.read_schema(transcripts).names)
+        needed = [c for c in ("original_cell_id", "cell_id", "_etype") if c in names]
+        if "original_cell_id" not in needed or "cell_id" not in needed:
+            row.na("n_transcripts_recovered", "input assignment is not defined for this method")
+            row.na("recovery_percent", "input assignment is not defined for this method")
+            return
+        frame = pd.read_parquet(transcripts, columns=needed)
+    except Exception as exc:
+        row.na("n_transcripts_recovered", f"assignment table unreadable: {exc}")
+        row.na("recovery_percent", f"assignment table unreadable: {exc}")
+        return
+    unassigned = {"UNASSIGNED", "-1", "0", "None", "nan", "<NA>", ""}
+    initial_unassigned = frame["original_cell_id"].astype(str).isin(unassigned)
+    if "_etype" in frame:
+        final_assigned = frame["_etype"].astype(str).isin({"cell", "partial", "component"})
+    else:
+        final_assigned = ~frame["cell_id"].astype(str).isin(unassigned)
+    denominator = int(initial_unassigned.sum())
+    recovered = int((initial_unassigned & final_assigned).sum())
+    row.set("n_transcripts_initially_unassigned", denominator)
+    row.set("n_transcripts_recovered", recovered)
+    if denominator:
+        row.set("recovery_percent", 100.0 * recovered / denominator)
+    else:
+        row.na("recovery_percent", "input has no unassigned transcripts/bins")
 
 
 def _tracer_whole_partial(row: EvalRow, transcripts: Path) -> None:
@@ -220,6 +261,8 @@ _CPMI_COLUMNS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("cpmi_relative_purity", ("relative_purity",)),
     ("cpmi_relative_conflict", ("relative_conflict",)),
 )
+_CPMI_METRICS = tuple(x[0] for x in _CPMI_COLUMNS) + (
+    "cpmi_coherence", "cpmi_relative_coherence")
 
 
 def tracer_conflict_purity(row: EvalRow, run_dir: Path) -> None:
@@ -229,7 +272,8 @@ def tracer_conflict_purity(row: EvalRow, run_dir: Path) -> None:
     for every other method the quantity is undefined, not zero, so the row is
     marked rather than filled.
     """
-    for name in ("cell_scores.tsv.gz", "outputs/cell_scores.tsv.gz"):
+    for name in ("cell_scores.tsv.gz", "outputs/cell_scores.tsv.gz",
+                 "profile_scores.tsv.gz", "outputs/profile_scores.tsv.gz"):
         path = Path(run_dir) / name
         if not path.exists():
             continue
@@ -246,15 +290,30 @@ def tracer_conflict_purity(row: EvalRow, run_dir: Path) -> None:
                 continue
             row.set(dst, float(pd.to_numeric(scores[src], errors="coerce").median()))
             found = True
+        # TRACER defines count-mode coherence as purity minus conflict.
+        # Derive it per entity before taking the median; subtracting two
+        # independently-computed medians is not equivalent.
+        if {"purity_score", "conflict_score"}.issubset(scores.columns):
+            coherence = (pd.to_numeric(scores["purity_score"], errors="coerce")
+                         - pd.to_numeric(scores["conflict_score"], errors="coerce"))
+            row.set("cpmi_coherence", float(coherence.median()))
+        if {"relative_purity", "relative_conflict"}.issubset(scores.columns):
+            relative = (pd.to_numeric(scores["relative_purity"], errors="coerce")
+                        - pd.to_numeric(scores["relative_conflict"], errors="coerce"))
+            row.set("cpmi_relative_coherence", float(relative.median()))
         if not found:
             # The file is there but carries none of the expected columns --
             # say so, rather than leaving the cell blank with no explanation.
             cols = ", ".join(map(str, scores.columns[:8]))
-            for dst in ("cpmi_purity", "cpmi_conflict"):
+            for dst in _CPMI_METRICS:
                 row.na(dst, f"cell scores present but no purity/conflict column ({cols})")
+        else:
+            for dst in _CPMI_METRICS:
+                if dst not in row.values:
+                    row.na(dst, f"TRACER score table does not contain inputs for {dst}")
         return
-    row.na("cpmi_purity", "method does not emit cPMI cell scores")
-    row.na("cpmi_conflict", "method does not emit cPMI cell scores")
+    for dst in _CPMI_METRICS:
+        row.na(dst, "method does not emit cPMI cell/profile scores")
 
 
 # ---------------------------------------------------------------------------
@@ -405,12 +464,15 @@ def build_table(rows: list[EvalRow]) -> pd.DataFrame:
             "median_transcripts_per_partial_cell",
             "n_partial_only_cells", "n_whole_and_partial_cells",
             "n_transcripts_total", "n_transcripts_assigned",
-            "n_transcripts_unassigned", "frac_assigned",
+            "n_transcripts_unassigned", "frac_assigned", "assignment_percent",
+            "n_transcripts_initially_unassigned", "n_transcripts_recovered",
+            "recovery_percent",
             "rctd_entropy_median", "rctd_max_weight_median",
             "kendall_tau_median", "pearson_r_median", "spearman_rho_median",
             "marker_logfc_median",
-            "cpmi_purity", "cpmi_conflict",
-            "cpmi_relative_purity", "cpmi_relative_conflict"]
+            "cpmi_purity", "cpmi_conflict", "cpmi_coherence",
+            "cpmi_relative_purity", "cpmi_relative_conflict",
+            "cpmi_relative_coherence"]
     cols = [c for c in lead if c in df.columns] + \
            [c for c in df.columns if c not in lead and not c.endswith("_note")] + \
            [c for c in df.columns if c.endswith("_note")]
