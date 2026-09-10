@@ -14,9 +14,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       ca-certificates git procps time libgl1 libglib2.0-0 libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
-RUN micromamba install -y -n base -c conda-forge \
+RUN micromamba install -y -n base -c conda-forge -c bioconda \
       python=3.11 r-base=4.4 r-seurat=5.3.0 r-arrow=21.0.0 \
-      r-optparse r-jsonlite r-dplyr r-remotes r-matrix r-anndata \
+      r-optparse r-jsonlite r-dplyr r-remotes r-matrix r-anndata=0.7.5.6 \
     && micromamba clean --all --yes
 
 RUN python -m pip install \
