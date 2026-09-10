@@ -314,6 +314,7 @@ process BIN2CELL {
     path spaceranger_dir
     path source_image
     path resource_runner
+    path bin2cell_runner
     val sample_name
     val seed
     val run_scope
@@ -322,11 +323,12 @@ process BIN2CELL {
     path 'bin2cell', emit: results
     script:
     def cap = run_scope == 'smoke' ? "--max-transcripts ${smoke_bins}" : ''
+    def blockSize = run_scope == 'smoke' ? 512 : 4096
     """
     mkdir -p bin2cell
     python '${resource_runner}' --output bin2cell/resource_usage.json --log bin2cell/container.log \
       --requested-cpus '${task.cpus}' --requested-memory-gb '${task.memory.toGiga()}' --method bin2cell -- \
-      python -m segbench run bin2cell --input-h5ad '${input_h5}' --spaceranger-dir '${spaceranger_dir}' \
+      python '${bin2cell_runner}' --block-size '${blockSize}' -- --input-h5ad '${input_h5}' --spaceranger-dir '${spaceranger_dir}' \
       --source-image '${source_image}' --outdir bin2cell --sample-name '${sample_name}' \
       --seed '${seed}' --threads '${task.cpus}' ${cap} --mpp 0.5 --prob-thresh 0.01 \
       --nms-thresh 0.5 --stardist-model 2D_versatile_he --expand-algorithm max_bin_distance \
@@ -470,12 +472,13 @@ workflow {
         spaceranger_ch = Channel.fromPath(resolveDatasetPath(params.spaceranger_dir, inputDir), checkIfExists: true)
         image_ch = Channel.fromPath(resolveDatasetPath(params.source_image, inputDir), checkIfExists: true)
         kidney_prep_ch = Channel.fromPath(file("${projectDir}/bin/prepare_kidney_seg_input.py"), checkIfExists: true)
+        bin2cell_runner_ch = Channel.fromPath(file("${projectDir}/adapters/run_bin2cell.py"), checkIfExists: true)
         PREP_KIDNEY_SEG(seg_input_ch, kidney_prep_ch, params.sample_name, params.run_scope, params.smoke_kidney_rows)
         TRACER_SEG(PREP_KIDNEY_SEG.out.prepared.map{ it.resolve('kidney_seg_input.parquet') }, pmi_ch,
                    segbench_src_ch, resource_script_ch, params.sample_name, params.seed)
         TRACER_NOSEG(matrix_ch, spatial_ch, pmi_ch, segbench_src_ch, resource_script_ch,
                      params.sample_name, params.seed, params.run_scope, params.smoke_kidney_transcripts)
-        BIN2CELL(b2c_h5_ch, spaceranger_ch, image_ch, resource_script_ch, params.sample_name,
+        BIN2CELL(b2c_h5_ch, spaceranger_ch, image_ch, resource_script_ch, bin2cell_runner_ch, params.sample_name,
                  params.seed, params.run_scope, params.smoke_kidney_bins)
         methods = TRACER_SEG.out.results.mix(TRACER_NOSEG.out.results, BIN2CELL.out.results).collect()
         EVALUATE_KIDNEY(methods, holdout_ch, pmi_ch,
