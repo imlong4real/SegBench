@@ -1,6 +1,6 @@
 {
   "id": "segbench-0-1-0-cirro",
-  "name": "SegBench: Lung Xenium / Kidney VisiumHD",
+  "name": "SegBench - Lung Xenium / Kidney VisiumHD",
   "desc": "Frozen multi-method segmentation benchmarking with held-out evaluation and plot-ready outputs",
   "executor": "NEXTFLOW",
   "parentProcessIds": ["custom_dataset"],
