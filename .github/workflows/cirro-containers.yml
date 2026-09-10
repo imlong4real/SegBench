@@ -25,6 +25,8 @@ jobs:
             dockerfile: workflows/cirro/containers/analysis.Dockerfile
           - name: segger
             dockerfile: workflows/cirro/containers/segger.Dockerfile
+          - name: tracer
+            dockerfile: workflows/cirro/containers/tracer.Dockerfile
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -52,6 +54,10 @@ jobs:
           if [[ "$IMAGE_NAME" == "analysis" ]]; then
             docker run --rm "$IMAGE" python -m segbench selftest
             docker run --rm "$IMAGE" Rscript -e 'stopifnot(requireNamespace("anndata", quietly=TRUE), requireNamespace("spacexr", quietly=TRUE), requireNamespace("SPLIT", quietly=TRUE), requireNamespace("cellAdmix", quietly=TRUE))'
+          elif [[ "$IMAGE_NAME" == "segger" ]]; then
+            docker run --rm "$IMAGE" bash -lc 'test "$(cat /opt/container-manifest/segger-commit.txt)" = "ca7bf1caaf9a177dd1f3f9051f020d2e7d3937ac"'
+            docker run --rm "$IMAGE" python -c 'import importlib.metadata as m; print(m.version("segger"))'
           else
-            docker run --rm "$IMAGE" segger --help
+            docker run --rm "$IMAGE" ps --version
+            docker run --rm "$IMAGE" python -c 'import tracer; print(tracer.__version__)'
           fi
