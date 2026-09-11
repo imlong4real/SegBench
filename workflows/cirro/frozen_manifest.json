@@ -87,7 +87,9 @@
     "segger": {
       "version": "0.2.0",
       "commit": "ca7bf1caaf9a177dd1f3f9051f020d2e7d3937ac",
-      "container": "ghcr.io/imlong4real/segbench-segger@sha256:6cf8c29e5217b294f2b2be0d975a1e9c9732a9568ceec4e7cbd2ddcc61e2776c",
+      "container": "ghcr.io/imlong4real/segbench-segger@sha256:a27dc6be8d11a66d2ec9244381e75a6dc177aca7b5e85966054f7bda77996677",
+      "container_build_commit": "e1b553459afca947f662edd265afaa72a379a5c3",
+      "container_contract": "Segger metadata/version and OpenCV import passed in GitHub Actions run 34543600193",
       "cuda": "12.1",
       "pixi_lock_sha256": "63e6949a7762e367060e74bf43f8526c8625c97c943d6e1737b92e3cabb54498",
       "parameters": {"epochs": 20, "upstream_defaults": true, "seed": 20260909, "deterministic_algorithms": true}
@@ -123,9 +125,10 @@
   },
   "workflow_containers": {
     "build_commit": "f13ecb86763f9eb6a8ddc0f69e0100b3a6a508c3",
+    "segger_build_commit": "e1b553459afca947f662edd265afaa72a379a5c3",
     "tracer_runner_build_commit": "09a93362ceb7fbd2fd714b0d960e32efaa14f5d2",
     "analysis": "ghcr.io/imlong4real/segbench-analysis@sha256:98985cd498937a651cb4c278d562452606c24a9bea7095d1eecd5c7fea6a42a3",
-    "segger": "ghcr.io/imlong4real/segbench-segger@sha256:6cf8c29e5217b294f2b2be0d975a1e9c9732a9568ceec4e7cbd2ddcc61e2776c",
+    "segger": "ghcr.io/imlong4real/segbench-segger@sha256:a27dc6be8d11a66d2ec9244381e75a6dc177aca7b5e85966054f7bda77996677",
     "tracer": "ghcr.io/imlong4real/segbench-tracer@sha256:7b1108f2082f3a10baa27e9976be0b58a27564d03f9af7bdb240b4c73361d4a5"
   },
   "containers_resolved_by_digest_in_nextflow_config": true,
