@@ -115,7 +115,8 @@
         "reported_labels": "original held-out-reference labels are restored before every per-cell assignment, weight table, and metric",
         "receipt": "rctd_celltype_label_map.tsv"
       },
-      "parameters": {"doublet_mode": "doublet", "umi_min": 10, "umi_min_sigma": 10, "min_reference_cells": 50, "same_holdout_for_all_methods": true}
+      "parameters": {"doublet_mode": "doublet", "umi_min": 10, "umi_min_sigma": 10, "reference_min_umi": 10, "min_reference_cells": 50, "same_holdout_for_all_methods": true},
+      "reference_min_umi_rationale": "Fixed before any held-out RCTD metric was available. A floor of 100 is incompatible with the frozen low-plex panels (the exact 67-gene Segger panel retains only 7 Ciliated cells); the uniform floor of 10 retains at least 97 cells in every lung class and matches the spatial UMI floor."
     },
     "tracer": {
       "version": "0.1.1",

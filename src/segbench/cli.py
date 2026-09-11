@@ -334,7 +334,8 @@ def cmd_evaluate(args: argparse.Namespace) -> int:
                 res = ev.run_rctd(
                     cell_h5ad=cell_h5ad, reference_h5ad=Path(ref),
                     celltype_col=ct_col, outdir=rdir, rscript=rscript,
-                    exclude_celltypes=dropped, cores=args.rctd_cores)
+                    exclude_celltypes=dropped, cores=args.rctd_cores,
+                    reference_min_umi=args.rctd_reference_min_umi)
                 for k, v in res.items():
                     row.set(k, v)
             elif per_cell.exists():
@@ -452,6 +453,9 @@ def build_parser() -> argparse.ArgumentParser:
     pe.add_argument("--min-reference-cells", type=int,
                     default=50, help="drop reference cell types below this "
                                        "count from RCTD/marker metrics")
+    pe.add_argument("--rctd-reference-min-umi", type=int, default=100,
+                    help="minimum panel-restricted UMI count for an scRNA "
+                         "reference cell passed to RCTD")
     pe.add_argument("--skip-rctd", action="store_true",
                     help="skip RCTD (and the metrics that depend on its labels)")
     pe.add_argument("--rctd-cores", type=int, default=4)

@@ -16,9 +16,11 @@ def test_rctd_command_freezes_sparse_profile_cutoffs(tmp_path, monkeypatch):
         outdir=tmp_path,
         rscript="Rscript",
         exclude_celltypes=[],
+        reference_min_umi=10,
     )
 
     command = (tmp_path / "rctd_cmd.txt").read_text()
     assert "--umi-min 10" in command
     assert "--umi-min-sigma 10" in command
+    assert "--reference-min-umi 10" in command
     assert result["rctd_status"] == "failed(rc=1)"
