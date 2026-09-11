@@ -379,6 +379,7 @@ process EVALUATE_XENIUM {
       --replicate 1 --frozen-manifest '${frozen_manifest}' --split-manifest '${split_manifest}' \
       --workflow-revision '${workflow_revision}' \
       --input-receipt '${input_manifest}' --pmi '${pmi}' --outdir benchmark_results/evaluation
+    python -c 'import json; m=json.load(open("benchmark_results/evaluation/benchmark_manifest.json")); v=str(m.get("workflow_revision", "")); assert v and v != "unknown", "workflow revision missing from benchmark manifest"'
     cp '${input_manifest}' benchmark_results/input_checksums.json
     cp '${split_manifest}' benchmark_results/evaluation/reference_split_manifest.json
     """
@@ -424,6 +425,7 @@ process EVALUATE_KIDNEY {
       --replicate 1 --frozen-manifest '${frozen_manifest}' --input-receipt '${input_manifest}' \
       --workflow-revision '${workflow_revision}' \
       --pmi '${pmi}' --outdir benchmark_results/evaluation
+    python -c 'import json; m=json.load(open("benchmark_results/evaluation/benchmark_manifest.json")); v=str(m.get("workflow_revision", "")); assert v and v != "unknown", "workflow revision missing from benchmark manifest"'
     cp '${input_manifest}' benchmark_results/input_checksums.json
     cp '${input_receipt}' benchmark_results/effective_seg_input_receipt.json
     """
@@ -446,6 +448,7 @@ workflow {
     resource_script_ch = Channel.fromPath(file("${projectDir}/bin/run_with_resources.py"), checkIfExists: true)
     segbench_src_ch = Channel.fromPath(file("${projectDir}/../../src"), checkIfExists: true)
     rctd_script_ch = Channel.fromPath(file("${projectDir}/../../workflow/scripts/run_rctd.R"), checkIfExists: true)
+    workflow_revision = System.getenv('PW_WORKFLOW_VERSION') ?: (workflow.revision ?: 'unknown')
 
     if (params.dataset_kind == 'xenium_lung') {
         requiredParam('transcripts', params.transcripts); requiredParam('xenium_dir', params.xenium_dir)
@@ -490,7 +493,7 @@ workflow {
                   SPLIT.out.results, CELLADMIX.out.results, TRACER_SEG.out.results).collect()
         EVALUATE_XENIUM(methods, holdout_ch, pmi_ch, split_manifest_ch, input_manifest_ch,
                         frozen_manifest_ch, tidy_script_ch, segbench_src_ch, rctd_script_ch,
-                        params.sample_name, params.run_scope, workflow.revision ?: 'unknown')
+                        params.sample_name, params.run_scope, workflow_revision)
     } else {
         requiredParam('kidney_seg_input', params.kidney_seg_input)
         requiredParam('visiumhd_matrix', params.visiumhd_matrix); requiredParam('spatial_dir', params.spatial_dir)
@@ -516,6 +519,6 @@ workflow {
                         PREP_KIDNEY_SEG.out.prepared.map{ it.resolve('frozen_input_receipt.json') },
                         input_manifest_ch, frozen_manifest_ch, tidy_script_ch, segbench_src_ch,
                         rctd_script_ch,
-                        params.sample_name, params.run_scope, workflow.revision ?: 'unknown')
+                        params.sample_name, params.run_scope, workflow_revision)
     }
 }

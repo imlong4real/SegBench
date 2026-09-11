@@ -7,6 +7,7 @@
     "method_tuning_after_holdout_metrics": "prohibited",
     "production_gate": "all Cirro method and evaluation smoke tests must pass and agree with local contracts",
     "heldout_evaluation_gate": "all requested RCTD rows must report ok; RETICULATE_PYTHON is fixed to /opt/conda/bin/python and recorded per run",
+    "workflow_revision_receipt": "Cirro PW_WORKFLOW_VERSION must be non-empty and non-unknown in benchmark_manifest.json",
     "input_population": "one frozen effective input per platform; no method-specific QV or control-probe filtering",
     "not_applicable_values": "literal NA with an explanatory provenance note; never imputed"
   },
