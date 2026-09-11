@@ -9,7 +9,7 @@
   "code": {
     "repository": "GITHUBPUBLIC",
     "uri": "imlong4real/SegBench",
-    "version": "a4470940d7a6e00a061534611d4349e33983e308",
+    "version": "025f29abe38aed44dce6a1e0530648815e564c8b",
     "script": "workflows/cirro/main.nf"
   }
 }
