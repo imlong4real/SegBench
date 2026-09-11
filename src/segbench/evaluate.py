@@ -45,6 +45,7 @@ dominates a median-over-celltypes summary. The dropped types are recorded in
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -59,7 +60,10 @@ from . import REPO_ROOT
 #: the marker/Kendall metrics (see module docstring).
 MIN_REFERENCE_CELLS = 50
 
-RCTD_SCRIPT = REPO_ROOT / "workflow" / "scripts" / "run_rctd.R"
+RCTD_SCRIPT = Path(os.environ.get(
+    "SEGBENCH_RCTD_SCRIPT",
+    REPO_ROOT / "workflow" / "scripts" / "run_rctd.R",
+))
 
 
 # ---------------------------------------------------------------------------
@@ -424,6 +428,7 @@ def panel_restricted_reference(reference_h5ad: Path, panel, cache_dir: Path) -> 
 def run_rctd(*, cell_h5ad: Path, reference_h5ad: Path, celltype_col: str,
              outdir: Path, rscript: str, exclude_celltypes: list[str],
              cores: int = 4, reference_min_umi: int = 100,
+             umi_min: int = 10, umi_min_sigma: int = 10,
              tag: str = "post") -> dict[str, float]:
     """Run spacexr RCTD and return median entropy / max weight.
 
@@ -439,6 +444,8 @@ def run_rctd(*, cell_h5ad: Path, reference_h5ad: Path, celltype_col: str,
            "--outdir", str(outdir),
            "--doublet-mode", "doublet",
            "--max-cores", str(cores),
+           "--umi-min", str(umi_min),
+           "--umi-min-sigma", str(umi_min_sigma),
            "--reference-min-umi", str(reference_min_umi)]
     if exclude_celltypes:
         cmd += ["--exclude-celltypes", ",".join(exclude_celltypes)]

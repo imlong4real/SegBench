@@ -142,6 +142,24 @@ parse_args_local <- function() {
 # -----------------------------------------------------------------------------
 # Build spacexr Reference + SpatialRNA
 # -----------------------------------------------------------------------------
+make_spacexr_label_map <- function(labels) {
+  original <- sort(unique(as.character(labels)))
+  # The pinned spacexr Reference() rejects '/' in factor levels.  Encode only
+  # that prohibited character, check that the mapping is one-to-one, and
+  # restore the original labels before writing any benchmark result.
+  encoded <- gsub("/", "__SEGBENCH_SLASH__", original, fixed = TRUE)
+  if (anyDuplicated(encoded)) {
+    stop("Cell-type label encoding is not one-to-one; refusing ambiguous RCTD labels.")
+  }
+  data.frame(
+    original_label = original,
+    spacexr_label = encoded,
+    encoded = original != encoded,
+    stringsAsFactors = FALSE
+  )
+}
+
+
 build_reference <- function(ref_path, celltype_col, min_cells, seed,
                              restrict_genes = NULL, reference_min_umi = 100,
                              exclude_celltypes = NULL) {
@@ -186,6 +204,13 @@ build_reference <- function(ref_path, celltype_col, min_cells, seed,
   obj$obs_names <- obj$obs_names[keep_rows]
   message(sprintf("[ref] %d cells across %d celltypes (after min_cells=%d filter)",
                   nrow(obj$X), length(unique(ct)), min_cells))
+  label_map <- make_spacexr_label_map(ct)
+  if (any(label_map$encoded)) {
+    message(sprintf("[ref] encoded %d spacexr-prohibited cell-type label(s); outputs restore original labels",
+                    sum(label_map$encoded)))
+  }
+  to_spacexr <- setNames(label_map$spacexr_label, label_map$original_label)
+  ct <- unname(to_spacexr[ct])
   # spacexr expects genes × cells.
   counts <- t(obj$X)
   rownames(counts) <- as.character(obj$var_names)
@@ -194,7 +219,7 @@ build_reference <- function(ref_path, celltype_col, min_cells, seed,
   names(cell_types) <- as.character(obj$obs_names)
   nUMI <- Matrix::colSums(counts)
   ref <- spacexr::Reference(counts, cell_types, nUMI, min_UMI = reference_min_umi)
-  ref
+  list(reference = ref, label_map = label_map)
 }
 
 
@@ -265,7 +290,7 @@ mixture_score_pair <- function(weights_norm, category_map, cat_a, cat_b) {
 # -----------------------------------------------------------------------------
 # Run one RCTD instance
 # -----------------------------------------------------------------------------
-run_one_rctd <- function(tag, ref, spatial, args, category_map, outdir) {
+run_one_rctd <- function(tag, ref, spatial, args, category_map, label_map, outdir) {
   message(sprintf("[%s] create.RCTD ...", tag))
   myRCTD <- spacexr::create.RCTD(
     spatial, ref,
@@ -280,6 +305,11 @@ run_one_rctd <- function(tag, ref, spatial, args, category_map, outdir) {
 
   res <- myRCTD@results
   weights_norm <- as.matrix(spacexr::normalize_weights(res$weights))
+  to_original <- setNames(label_map$original_label, label_map$spacexr_label)
+  if (!all(colnames(weights_norm) %in% names(to_original))) {
+    stop("RCTD returned an unmapped internal cell-type label; refusing ambiguous output.")
+  }
+  colnames(weights_norm) <- unname(to_original[colnames(weights_norm)])
   dom <- dominant_celltype(weights_norm)
   entropy <- apply(weights_norm, 1, shannon_entropy)
   max_w <- apply(weights_norm, 1, function(r) if (all(is.na(r))) NA_real_ else max(r))
@@ -378,21 +408,28 @@ main <- function() {
   if (!is.null(args$`exclude-celltypes`)) {
     exclude_ct <- trimws(strsplit(args$`exclude-celltypes`, ",")[[1]])
   }
-  ref <- build_reference(args$`reference-h5ad`,
-                          args$`reference-celltype-col`,
-                          args$`min-cells-per-celltype-reference`,
-                          args$seed,
-                          restrict_genes = panel_genes,
-                          reference_min_umi = args$`reference-min-umi`,
-                          exclude_celltypes = exclude_ct)
+  ref_bundle <- build_reference(args$`reference-h5ad`,
+                                 args$`reference-celltype-col`,
+                                 args$`min-cells-per-celltype-reference`,
+                                 args$seed,
+                                 restrict_genes = panel_genes,
+                                 reference_min_umi = args$`reference-min-umi`,
+                                 exclude_celltypes = exclude_ct)
+  ref <- ref_bundle$reference
+  label_map <- ref_bundle$label_map
+  write.table(label_map,
+              file = file.path(outdir, "rctd_celltype_label_map.tsv"),
+              sep = "\t", quote = FALSE, row.names = FALSE)
 
   runs <- list()
   t0 <- Sys.time()
   spatial_post <- build_spatial(args$`spatial-h5ad`, args$`umi-min`)
-  runs$post <- run_one_rctd("post", ref, spatial_post, args, category_map, outdir)
+  runs$post <- run_one_rctd("post", ref, spatial_post, args, category_map,
+                            label_map, outdir)
   if (!is.null(args$`spatial-h5ad-pre`)) {
     spatial_pre <- build_spatial(args$`spatial-h5ad-pre`, args$`umi-min`)
-    runs$pre <- run_one_rctd("pre", ref, spatial_pre, args, category_map, outdir)
+    runs$pre <- run_one_rctd("pre", ref, spatial_pre, args, category_map,
+                             label_map, outdir)
   }
   t1 <- Sys.time()
 
@@ -433,6 +470,7 @@ main <- function() {
   summary <- list(
     command   = paste(commandArgs(trailingOnly = FALSE), collapse = " "),
     args      = args,
+    celltype_label_map = label_map,
     runs      = lapply(runs, function(r) r$summary),
     runtime_seconds = as.numeric(difftime(t1, t0, units = "secs")),
     timestamp_utc = format(Sys.time(), "%Y-%m-%dT%H:%M:%SZ", tz = "UTC")

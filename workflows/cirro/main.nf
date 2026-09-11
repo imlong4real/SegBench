@@ -351,6 +351,8 @@ process EVALUATE_XENIUM {
     path input_manifest
     path frozen_manifest
     path tidy_script
+    path segbench_src
+    path rctd_script
     val sample_name
     val run_scope
     val workflow_revision
@@ -362,6 +364,8 @@ process EVALUATE_XENIUM {
     mkdir -p benchmark_results/methods benchmark_results/evaluation
     for d in ${methodDirs}; do cp -r "\$d" benchmark_results/methods/; done
     export SEGBENCH_ENV_CONFIG=/opt/segbench/workflows/cirro/configs/environments.container.yaml
+    export PYTHONPATH='${segbench_src}'
+    export SEGBENCH_RCTD_SCRIPT='${rctd_script}'
     export RETICULATE_PYTHON=/opt/conda/bin/python
     /opt/conda/bin/Rscript -e 'cfg <- reticulate::py_config(); stopifnot(normalizePath(cfg\$python) == normalizePath(Sys.getenv("RETICULATE_PYTHON"))); cat(sprintf("reticulate_python=%s\\npython_version=%s\\n", cfg\$python, cfg\$version))' \
       > benchmark_results/evaluation/rctd_environment_receipt.txt
@@ -392,6 +396,8 @@ process EVALUATE_KIDNEY {
     path input_manifest
     path frozen_manifest
     path tidy_script
+    path segbench_src
+    path rctd_script
     val sample_name
     val run_scope
     val workflow_revision
@@ -403,6 +409,8 @@ process EVALUATE_KIDNEY {
     mkdir -p benchmark_results/methods benchmark_results/evaluation
     for d in ${methodDirs}; do cp -r "\$d" benchmark_results/methods/; done
     export SEGBENCH_ENV_CONFIG=/opt/segbench/workflows/cirro/configs/environments.container.yaml
+    export PYTHONPATH='${segbench_src}'
+    export SEGBENCH_RCTD_SCRIPT='${rctd_script}'
     export RETICULATE_PYTHON=/opt/conda/bin/python
     /opt/conda/bin/Rscript -e 'cfg <- reticulate::py_config(); stopifnot(normalizePath(cfg\$python) == normalizePath(Sys.getenv("RETICULATE_PYTHON"))); cat(sprintf("reticulate_python=%s\\npython_version=%s\\n", cfg\$python, cfg\$version))' \
       > benchmark_results/evaluation/rctd_environment_receipt.txt
@@ -437,6 +445,7 @@ workflow {
     tidy_script_ch = Channel.fromPath(file("${projectDir}/bin/make_tidy_outputs.py"), checkIfExists: true)
     resource_script_ch = Channel.fromPath(file("${projectDir}/bin/run_with_resources.py"), checkIfExists: true)
     segbench_src_ch = Channel.fromPath(file("${projectDir}/../../src"), checkIfExists: true)
+    rctd_script_ch = Channel.fromPath(file("${projectDir}/../../workflow/scripts/run_rctd.R"), checkIfExists: true)
 
     if (params.dataset_kind == 'xenium_lung') {
         requiredParam('transcripts', params.transcripts); requiredParam('xenium_dir', params.xenium_dir)
@@ -480,8 +489,8 @@ workflow {
         methods = STANDARDIZE_BAYSOR.out.results.mix(PROSEG.out.results, STANDARDIZE_SEGGER.out.results,
                   SPLIT.out.results, CELLADMIX.out.results, TRACER_SEG.out.results).collect()
         EVALUATE_XENIUM(methods, holdout_ch, pmi_ch, split_manifest_ch, input_manifest_ch,
-                        frozen_manifest_ch, tidy_script_ch, params.sample_name, params.run_scope,
-                        workflow.revision ?: 'unknown')
+                        frozen_manifest_ch, tidy_script_ch, segbench_src_ch, rctd_script_ch,
+                        params.sample_name, params.run_scope, workflow.revision ?: 'unknown')
     } else {
         requiredParam('kidney_seg_input', params.kidney_seg_input)
         requiredParam('visiumhd_matrix', params.visiumhd_matrix); requiredParam('spatial_dir', params.spatial_dir)
@@ -505,7 +514,8 @@ workflow {
         methods = TRACER_SEG.out.results.mix(TRACER_NOSEG.out.results, BIN2CELL.out.results).collect()
         EVALUATE_KIDNEY(methods, holdout_ch, pmi_ch,
                         PREP_KIDNEY_SEG.out.prepared.map{ it.resolve('frozen_input_receipt.json') },
-                        input_manifest_ch, frozen_manifest_ch, tidy_script_ch,
+                        input_manifest_ch, frozen_manifest_ch, tidy_script_ch, segbench_src_ch,
+                        rctd_script_ch,
                         params.sample_name, params.run_scope, workflow.revision ?: 'unknown')
     }
 }

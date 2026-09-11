@@ -108,7 +108,13 @@
     "spacexr_rctd": {
       "version": "2.2.1",
       "commit": "9f5dc33c8060f946c6072a138b70e189636e1435",
-      "parameters": {"doublet_mode": "doublet", "min_reference_cells": 50, "same_holdout_for_all_methods": true}
+      "label_adapter": {
+        "prohibited_character": "/",
+        "encoding": "replace / with __SEGBENCH_SLASH__ for the internal spacexr factor only",
+        "reported_labels": "original held-out-reference labels are restored before every per-cell assignment, weight table, and metric",
+        "receipt": "rctd_celltype_label_map.tsv"
+      },
+      "parameters": {"doublet_mode": "doublet", "umi_min": 10, "umi_min_sigma": 10, "min_reference_cells": 50, "same_holdout_for_all_methods": true}
     },
     "tracer": {
       "version": "0.1.1",
