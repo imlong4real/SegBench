@@ -362,9 +362,13 @@ process EVALUATE_XENIUM {
     mkdir -p benchmark_results/methods benchmark_results/evaluation
     for d in ${methodDirs}; do cp -r "\$d" benchmark_results/methods/; done
     export SEGBENCH_ENV_CONFIG=/opt/segbench/workflows/cirro/configs/environments.container.yaml
+    export RETICULATE_PYTHON=/opt/conda/bin/python
+    /opt/conda/bin/Rscript -e 'cfg <- reticulate::py_config(); stopifnot(normalizePath(cfg\$python) == normalizePath(Sys.getenv("RETICULATE_PYTHON"))); cat(sprintf("reticulate_python=%s\\npython_version=%s\\n", cfg\$python, cfg\$version))' \
+      > benchmark_results/evaluation/rctd_environment_receipt.txt
     python -m segbench evaluate benchmark_results/methods --dataset tsu20_lung \
       --reference-h5ad '${reference_holdout}' --reference-celltype-col Cell_Cluster_level1 \
       --min-reference-cells 50 --rctd-cores '${task.cpus}' --outdir benchmark_results/evaluation
+    python -c 'import pandas as pd; d=pd.read_csv("benchmark_results/evaluation/comparison_table.csv"); bad=d.loc[~d["rctd_status"].fillna("").astype(str).str.startswith("ok"), ["method", "rctd_status"]]; assert bad.empty, "RCTD gate failed:\\n" + bad.to_string(index=False)'
     python '${tidy_script}' --comparison benchmark_results/evaluation/comparison_table.csv \
       --methods-root benchmark_results/methods --dataset TSU-20 --platform Xenium \
       --replicate 1 --frozen-manifest '${frozen_manifest}' --split-manifest '${split_manifest}' \
@@ -398,9 +402,13 @@ process EVALUATE_KIDNEY {
     mkdir -p benchmark_results/methods benchmark_results/evaluation
     for d in ${methodDirs}; do cp -r "\$d" benchmark_results/methods/; done
     export SEGBENCH_ENV_CONFIG=/opt/segbench/workflows/cirro/configs/environments.container.yaml
+    export RETICULATE_PYTHON=/opt/conda/bin/python
+    /opt/conda/bin/Rscript -e 'cfg <- reticulate::py_config(); stopifnot(normalizePath(cfg\$python) == normalizePath(Sys.getenv("RETICULATE_PYTHON"))); cat(sprintf("reticulate_python=%s\\npython_version=%s\\n", cfg\$python, cfg\$version))' \
+      > benchmark_results/evaluation/rctd_environment_receipt.txt
     python -m segbench evaluate benchmark_results/methods --dataset kidney_visiumhd \
       --reference-h5ad '${reference_holdout}' --reference-celltype-col lineage \
       --min-reference-cells 50 --rctd-cores '${task.cpus}' --outdir benchmark_results/evaluation
+    python -c 'import pandas as pd; d=pd.read_csv("benchmark_results/evaluation/comparison_table.csv"); bad=d.loc[~d["rctd_status"].fillna("").astype(str).str.startswith("ok"), ["method", "rctd_status"]]; assert bad.empty, "RCTD gate failed:\\n" + bad.to_string(index=False)'
     python '${tidy_script}' --comparison benchmark_results/evaluation/comparison_table.csv \
       --methods-root benchmark_results/methods --dataset kidney --platform VisiumHD \
       --replicate 1 --frozen-manifest '${frozen_manifest}' --input-receipt '${input_manifest}' \
