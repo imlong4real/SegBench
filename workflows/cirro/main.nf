@@ -368,6 +368,7 @@ process EVALUATE_XENIUM {
     python -m segbench evaluate benchmark_results/methods --dataset tsu20_lung \
       --reference-h5ad '${reference_holdout}' --reference-celltype-col Cell_Cluster_level1 \
       --min-reference-cells 50 --rctd-cores '${task.cpus}' --outdir benchmark_results/evaluation
+    python -c 'from pathlib import Path; logs=sorted(Path("benchmark_results/methods").glob("*/rctd/rctd.log")); print("\\n".join("===== " + str(p) + " =====\\n" + p.read_text(errors="replace") for p in logs), flush=True)'
     python -c 'import pandas as pd; d=pd.read_csv("benchmark_results/evaluation/comparison_table.csv"); bad=d.loc[~d["rctd_status"].fillna("").astype(str).str.startswith("ok"), ["method", "rctd_status"]]; assert bad.empty, "RCTD gate failed:\\n" + bad.to_string(index=False)'
     python '${tidy_script}' --comparison benchmark_results/evaluation/comparison_table.csv \
       --methods-root benchmark_results/methods --dataset TSU-20 --platform Xenium \
@@ -408,6 +409,7 @@ process EVALUATE_KIDNEY {
     python -m segbench evaluate benchmark_results/methods --dataset kidney_visiumhd \
       --reference-h5ad '${reference_holdout}' --reference-celltype-col lineage \
       --min-reference-cells 50 --rctd-cores '${task.cpus}' --outdir benchmark_results/evaluation
+    python -c 'from pathlib import Path; logs=sorted(Path("benchmark_results/methods").glob("*/rctd/rctd.log")); print("\\n".join("===== " + str(p) + " =====\\n" + p.read_text(errors="replace") for p in logs), flush=True)'
     python -c 'import pandas as pd; d=pd.read_csv("benchmark_results/evaluation/comparison_table.csv"); bad=d.loc[~d["rctd_status"].fillna("").astype(str).str.startswith("ok"), ["method", "rctd_status"]]; assert bad.empty, "RCTD gate failed:\\n" + bad.to_string(index=False)'
     python '${tidy_script}' --comparison benchmark_results/evaluation/comparison_table.csv \
       --methods-root benchmark_results/methods --dataset kidney --platform VisiumHD \
