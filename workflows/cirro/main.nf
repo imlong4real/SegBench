@@ -160,7 +160,7 @@ process SEGGER {
       --requested-memory-gb '${task.memory.toGiga()}' --requested-gpus 1 --method segger -- \
       python '${seeded_cli}' --seed '${seed}' -- segment \
       -i '${prepared}/exact_xenium_bundle' -o segger_native/output \
-      --n-epochs 20 --save-anndata
+      --node-representation-dim 64 --n-epochs 20 --save-anndata
     test -s segger_native/output/segger_segmentation.parquet
     """
 }

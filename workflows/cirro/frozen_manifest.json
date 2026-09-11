@@ -93,7 +93,7 @@
       "container_contract": "Segger metadata/version and OpenCV import passed in GitHub Actions run 34543600193",
       "cuda": "12.1",
       "pixi_lock_sha256": "63e6949a7762e367060e74bf43f8526c8625c97c943d6e1737b92e3cabb54498",
-      "parameters": {"epochs": 20, "upstream_defaults": true, "seed": 20260909, "deterministic_algorithms": true}
+      "parameters": {"node_representation_dim": 64, "epochs": 20, "other_parameters": "upstream defaults", "seed": 20260909, "deterministic_algorithms": true}
     },
     "split": {
       "version": "0.3.0",
