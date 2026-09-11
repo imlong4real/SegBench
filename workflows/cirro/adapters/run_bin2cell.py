@@ -39,9 +39,32 @@ def _install_sparse_safe_insert_labels(b2c, *, chunk_size: int = 1_000_000):
         adata.uns.setdefault("bin2cell", {}).setdefault(
             "labels_npz_paths", {})[labels_key] = str(labels_path)
 
+        # ``scaled_he_image`` crops the morphology image by default and stores
+        # coordinates relative to that crop.  Bin2Cell's tutorial expects that
+        # generated key to be supplied to ``insert_labels``.  The SegBench core
+        # wrapper historically passed the full-image ``spatial`` key instead,
+        # which produces all-zero labels for a cropped smoke ROI.  Prefer the
+        # deterministic default crop key, or the sole recorded crop key.
+        effective_spatial_key = spatial_key
+        if basis == "spatial" and spatial_key == "spatial":
+            default_crop_key = "spatial_cropped_150_buffer"
+            cropped_keys = sorted(
+                str(key) for key in adata.obsm
+                if str(key).startswith("spatial_cropped_"))
+            if default_crop_key in cropped_keys:
+                effective_spatial_key = default_crop_key
+            elif len(cropped_keys) == 1:
+                effective_spatial_key = cropped_keys[0]
+            elif len(cropped_keys) > 1:
+                raise RuntimeError(
+                    "Multiple cropped spatial coordinate keys are present; "
+                    "cannot choose one safely: " + ", ".join(cropped_keys))
+        adata.uns["bin2cell"].setdefault(
+            "label_coordinate_keys", {})[labels_key] = effective_spatial_key
+
         coords = np.asarray(
             b2c.get_mpp_coords(
-                adata, basis=basis, spatial_key=spatial_key, mpp=mpp),
+                adata, basis=basis, spatial_key=effective_spatial_key, mpp=mpp),
             dtype=np.int64,
         )
         mask = (
