@@ -130,6 +130,9 @@ def main() -> int:
     ap.add_argument("--clusters", required=True)
     ap.add_argument("--outdir", required=True)
     ap.add_argument("--celltype-column", default="auto")
+    ap.add_argument("--min-qv", type=float, default=20.0,
+                    help="Phred QV floor, matching the benchmark's shared "
+                         "filtered transcript population. Set to 0 to disable.")
     args = ap.parse_args()
 
     xenium_dir = Path(args.xenium_dir)
@@ -151,8 +154,20 @@ def main() -> int:
     cell_meta.to_parquet(outdir / "xenium_cell_metadata_with_clusters.parquet", index=False)
 
     tx = pd.read_parquet(xenium_dir / "transcripts.parquet")
+    n_raw = len(tx)
+    # Every other imaging method is handed filtered_df_standardized.parquet,
+    # which is the raw table restricted to real genes at QV >= 20. Building
+    # cellAdmix's input from the raw table without that floor put it on a
+    # different molecule population (1,637,205 against 1,552,421), so its
+    # assignment fractions were not comparable with the rest of the suite.
+    min_qv = float(args.min_qv or 0.0)
+    if min_qv and "qv" in tx.columns:
+        tx = tx[tx["qv"].astype(float) >= min_qv].copy()
+    n_qv = len(tx)
     tx = tx[tx["cell_id"].astype(str).ne("UNASSIGNED")].copy()
     tx = tx[~tx["feature_name"].astype(str).str.match(CONTROL_PREFIX)].copy()
+    print(f"[common-inputs] transcripts: raw={n_raw:,} "
+          f"after QV>={min_qv}={n_qv:,} after unassigned+control={len(tx):,}")
     tx["cell_id"] = tx["cell_id"].astype(str)
     tx = tx.merge(clusters[["cell_id", "cluster", "celltype"]], on="cell_id", how="inner")
     tx_out = pd.DataFrame(

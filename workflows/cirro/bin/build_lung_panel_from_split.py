@@ -52,6 +52,8 @@ def main() -> None:
     parser.add_argument("--min-det-cells", type=int, default=25)
     parser.add_argument("--n-depth-bins", type=int, default=25)
     parser.add_argument("--prefix", default="lung_")
+    parser.add_argument("--celltype-col-note", default="",
+                        help="Free text recorded in the receipt.")
     args = parser.parse_args()
 
     builder = load_builder(args.builder_script)
@@ -119,7 +121,8 @@ def main() -> None:
             "observed_codetection_median": float(np.nanmedian(edges.O)),
         },
     }
-    (args.outdir / "lung_cpmi_builder_receipt.json").write_text(
+    receipt_name = f"{args.prefix}cpmi_builder_receipt.json" if args.prefix else "lung_cpmi_builder_receipt.json"
+    (args.outdir / receipt_name).write_text(
         json.dumps(stats, indent=2, sort_keys=True) + "\n")
     print(json.dumps(stats, indent=2, sort_keys=True))
 

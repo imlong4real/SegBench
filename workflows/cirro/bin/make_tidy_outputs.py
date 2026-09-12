@@ -49,8 +49,16 @@ def main() -> None:
     p.add_argument("--workflow-revision",default="unknown")
     p.add_argument("--split-manifest",type=Path); p.add_argument("--input-receipt",type=Path,required=True)
     p.add_argument("--pmi",type=Path,required=True); p.add_argument("--outdir",type=Path,required=True)
+    p.add_argument("--roi",default="whole_tissue",
+                   help="Frozen ROI id; 'whole_tissue' when the run is not ROI-scoped.")
+    p.add_argument("--density-quantile",default="whole_tissue",choices=["q25","q50","q75","whole_tissue"])
+    p.add_argument("--area-mm2",type=float,default=None,
+                   help="Physical ROI area, for entities per mm2.")
+    p.add_argument("--roi-manifest",type=Path,default=None)
     args=p.parse_args(); args.outdir.mkdir(parents=True,exist_ok=True)
     wide=pd.read_csv(args.comparison)
+    receipt=json.loads(args.input_receipt.read_text())
+    input_tx=receipt.get("effective_transcript_count") or receipt.get("source_transcript_count")
     idcols={"dataset","method","entity_kind","status","run_dir"}
     rows=[]
     for _,row in wide.iterrows():
@@ -65,13 +73,58 @@ def main() -> None:
                 provenance = "held-out evaluation reference"
             else:
                 provenance = "SegBench standardized contract"
-            rows.append({"dataset":args.dataset,"platform":args.platform,"method":row.method,
+            rows.append({"dataset":args.dataset,"platform":args.platform,
+                         "ROI":args.roi,"density_quantile":args.density_quantile,
+                         "area_mm2":args.area_mm2 if args.area_mm2 is not None else "NA",
+                         "input_tx":input_tx if input_tx is not None else "NA",
+                         "method":row.method,
                          "replicate":args.replicate,"metric":metric,
                          "value":value if applicable else "NA","unit":unit(metric),
                          "applicable":str(bool(applicable)).lower(),
                          "provenance":provenance})
     long=pd.DataFrame(rows)
+
+    # Density-normalised cost, plus entity density.  Platforms here differ in
+    # transcript density by more than an order of magnitude (Atera ~10.0M
+    # tx/mm2 against Xenium5K ~0.86M), so raw runtime and raw peak RSS compare
+    # the tissue as much as the method.
+    derived=[]
+    wide_by_method={str(r.method): r for _, r in wide.iterrows()}
+    for method_dir in sorted(q.parent for q in args.methods_root.rglob("benchmark_stats.json")):
+        rp=method_dir/"resource_usage.json"
+        if not rp.exists(): continue
+        res=json.loads(rp.read_text()); host=res.get("host",{})
+        method=res.get("method",method_dir.name)
+        wall=res.get("wall_clock_seconds"); rss=host.get("peak_rss_gb")
+        wrow=wide_by_method.get(method)
+        n_ent=(wrow.get("n_entities") if wrow is not None else None)
+        per_m = (input_tx/1e6) if input_tx else None
+        def add(metric, value, u, prov):
+            derived.append({"dataset":args.dataset,"platform":args.platform,
+                            "ROI":args.roi,"density_quantile":args.density_quantile,
+                            "area_mm2":args.area_mm2 if args.area_mm2 is not None else "NA",
+                            "input_tx":input_tx if input_tx is not None else "NA",
+                            "method":method,"replicate":args.replicate,"metric":metric,
+                            "value":value if value is not None else "NA","unit":u,
+                            "applicable":str(value is not None).lower(),"provenance":prov})
+        add("runtime_per_1m_transcripts",
+            (wall/per_m) if (wall is not None and per_m) else None,
+            "seconds per 1M transcripts","derived: wall clock / frozen input population")
+        add("peak_rss_gb_per_1m_transcripts",
+            (rss/per_m) if (rss is not None and per_m) else None,
+            "GiB per 1M transcripts","derived: host peak RSS / frozen input population")
+        add("entities_per_mm2",
+            (float(n_ent)/args.area_mm2) if (n_ent is not None and not pd.isna(n_ent)
+                                             and args.area_mm2) else None,
+            "entities per mm2","derived: entities / frozen ROI area")
+    if derived:
+        long=pd.concat([long,pd.DataFrame(derived)],ignore_index=True)
+
     long.to_csv(args.outdir/"benchmark_summary.tsv",sep="\t",index=False)
+    # The plot-ready table the campaign is specified to deliver.
+    plot_cols=["dataset","platform","ROI","density_quantile","area_mm2","input_tx",
+               "method","metric","value","unit"]
+    long[plot_cols].to_csv(args.outdir/"plot_ready_table.tsv",sep="\t",index=False)
     subset(long,ENTITY,args.outdir/"entity_summary.tsv")
     subset(long,RCTD,args.outdir/"rctd_metrics.tsv")
     subset(long,REFERENCE,args.outdir/"reference_correlations.tsv")
@@ -110,6 +163,10 @@ def main() -> None:
               "workflow_revision":args.workflow_revision,
               "input_receipt":json.loads(args.input_receipt.read_text()),
               "effective_pmi":{"name":args.pmi.name,"sha256":sha256(args.pmi)},
+              "roi":{"id":args.roi,"density_quantile":args.density_quantile,
+                     "area_mm2":args.area_mm2,"input_transcripts":input_tx,
+                     "frozen_manifest":(json.loads(args.roi_manifest.read_text())
+                                        if args.roi_manifest else None)},
               "reference_split":(json.loads(args.split_manifest.read_text()) if args.split_manifest else None),
               "method_receipts":receipts,"resource_usage":resources}
     manifest_path=args.outdir/"benchmark_manifest.json"

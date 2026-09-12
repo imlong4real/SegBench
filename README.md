@@ -35,8 +35,9 @@ their outputs can actually be compared.
 | [CellAdmix](https://github.com/kharchenkolab/celladmix) | refinement | cell |
 | [TRACER (Seg)](https://github.com/imlong4real/TRACER) | refinement | cell |
 
-¹ Registered and wired, but not yet completed on this cluster — see
-[docs/comparison_audit.md](docs/comparison_audit.md).
+¹ Migrated to the supported upstream (`dpeerlab/segger` v0.2.0) but **not
+benchmarked**: that release has no CPU code path and no GPU is available here.
+See [docs/segger_migration.md](docs/segger_migration.md).
 
 **Sequencing / array-based (Visium HD)**
 
@@ -143,6 +144,8 @@ builder currently has a defect that produces an unusable panel without erroring
 | [docs/methods.md](docs/methods.md) | per-method inputs, invocation, and output contract |
 | [docs/adding_a_method.md](docs/adding_a_method.md) | adding a method to the registry |
 | [docs/comparison_audit.md](docs/comparison_audit.md) | **benchmark caveats, selection effects, reference circularity, known-bad tooling** |
+| [docs/input_provenance.md](docs/input_provenance.md) | what each method actually read, with checksums |
+| [docs/segger_migration.md](docs/segger_migration.md) | Segger's pinned upstream version and why it is unrun |
 | [docs/audit.md](docs/audit.md) | repository and pipeline hygiene audit |
 | [reproducibility/](reproducibility/) | container recipes, environment locks, checksums |
 
