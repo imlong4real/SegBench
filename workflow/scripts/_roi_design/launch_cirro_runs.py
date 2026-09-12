@@ -54,11 +54,11 @@ def main() -> int:
     ap.add_argument("--only", nargs="*", default=None,
                     help="Explicit key:quantile selections, e.g. cosmx_nsclc:q50.")
     ap.add_argument("--ledger", required=True)
-    ap.add_argument("--r-method-memory-gb", type=int, default=None,
-                    help="Override the SPLIT/cellAdmix base memory. Defaults to "
-                         "160 GB, or 320 GB for Atera, where cellAdmix peaked at "
-                         "159.6 GB on the smallest (q25) ROI.")
-    ap.add_argument("--max-memory-gb", type=int, default=384)
+    ap.add_argument("--max-memory-gb", type=int, default=None,
+                    help="Retry memory ceiling. Defaults to 384 GiB, or 512 for "
+                         "Atera: cellAdmix peaked at 159.6 GiB against a 160 GiB "
+                         "first attempt on Atera q25 (1.93M tx), so the denser "
+                         "Atera ROIs need room to escalate.")
     ap.add_argument("--dry-run", action="store_true")
     a = ap.parse_args()
 
@@ -110,13 +110,14 @@ def main() -> int:
             "area_mm2": float(area),
             "roi_manifest": "roi_manifest_frozen.json",
             "max_retries": 2,
-            "max_memory_gb": a.max_memory_gb,
-            # cellAdmix was SIGKILLed at 159.6 GB against a 160 GB request on
-            # Atera q25 (1.93M tx).  q50 and q75 are denser still, so they do
-            # not start at a request already known to be too small.
-            "r_method_memory_gb": (a.r_method_memory_gb
-                                   if a.r_method_memory_gb is not None
-                                   else (320 if platform == "Atera" else 160)),
+            # The registered process scales SPLIT/cellAdmix memory as
+            # min(160 * attempt, max_memory_gb).  cellAdmix was SIGKILLed at
+            # 159.6 GiB against the 160 GiB first attempt on Atera q25
+            # (1.93M tx), so Atera gets a 512 GiB ceiling and escalates
+            # 160 -> 320 -> 480.  The first attempt fails fast (~4 min) and
+            # the retry carries the run; that failure is reported, not hidden.
+            "max_memory_gb": (a.max_memory_gb if a.max_memory_gb is not None
+                              else (512 if platform == "Atera" else 384)),
         }
         prefix = "SMOKE " if a.run == "smoke" else ""
         name = f"{prefix}SegBench ROI {key} {q} ({tx:,} tx)"
