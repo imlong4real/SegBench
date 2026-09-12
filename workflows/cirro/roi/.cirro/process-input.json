@@ -1,0 +1,22 @@
+{
+  "input_dir": "$.inputs[0].dataPath",
+  "dataset_kind": "$.dataset.params.dataset_kind",
+  "sample_name": "$.dataset.params.sample_name",
+  "run_scope": "$.dataset.params.run_scope",
+  "seed": "$.dataset.params.seed",
+  "transcripts": "$.dataset.params.transcripts",
+  "pmi": "$.dataset.params.pmi",
+  "reference_train": "$.dataset.params.reference_train",
+  "reference_holdout": "$.dataset.params.reference_holdout",
+  "reference_split_manifest": "$.dataset.params.reference_split_manifest",
+  "reference_celltype_col": "$.dataset.params.reference_celltype_col",
+  "platform": "$.dataset.params.platform",
+  "dataset_label": "$.dataset.params.dataset_label",
+  "roi_id": "$.dataset.params.roi_id",
+  "density_quantile": "$.dataset.params.density_quantile",
+  "area_mm2": "$.dataset.params.area_mm2",
+  "roi_manifest": "$.dataset.params.roi_manifest",
+  "max_retries": "$.dataset.params.max_retries",
+  "max_memory_gb": "$.dataset.params.max_memory_gb",
+  "outdir": "$.dataset.dataPath"
+}

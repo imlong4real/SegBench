@@ -1,0 +1,33 @@
+{
+  "form": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:segbench:cirro:form:roi:0.2.0",
+    "title": "SegBench: frozen ROI imaging benchmark",
+    "description": "Runs Baysor, ProSeg, Segger (GPU), SPLIT, cellAdmix and TRACER Seg on ONE frozen ROI. Coordinates, window size and occupancy rule come from roi_manifest_frozen.json and must not be changed here.",
+    "type": "object",
+    "properties": {
+      "dataset_kind": {"type": "string", "const": "imaging_roi", "default": "imaging_roi", "title": "Benchmark dataset kind", "description": "Fixed: this process only runs the frozen-ROI imaging graph."},
+      "sample_name": {"type": "string", "default": "segbench_roi", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$", "title": "Sample name", "description": "Short label written into every receipt."},
+      "run_scope": {"type": "string", "enum": ["smoke", "full"], "default": "smoke", "title": "Run scope", "description": "Run smoke on each new platform before full. Smoke uses the Spot queue so an unavailable GPU cannot block the CPU methods."},
+      "seed": {"type": "integer", "const": 20260909, "default": 20260909, "title": "Frozen seed", "description": "Locked analysis seed. Baysor v0.7.1 uses its hard-coded internal seed 1."},
+      "transcripts": {"type": "string", "pathType": "dataset", "file": "**/*.parquet", "title": "Frozen ROI transcripts", "description": "The frozen ROI parquet. This exact population is handed to every method; no method re-filters it."},
+      "pmi": {"type": "string", "pathType": "dataset", "file": "**/*cpmi*.csv*", "title": "cPMI panel", "description": "Platform-matched cPMI. Cervical panels are the delivered panel filtered by gene overlap only; CosMx and MERFISH panels are built once by the pinned builder and reused across every ROI."},
+      "reference_train": {"type": "string", "pathType": "dataset", "file": "**/*reference_train.h5ad", "title": "Training reference", "description": "Training-only scRNA split. Staged into SPLIT and common-input preparation, never into the evaluator."},
+      "reference_holdout": {"type": "string", "pathType": "dataset", "file": "**/*evaluation_holdout.h5ad", "title": "Held-out evaluation reference", "description": "Staged only into the evaluator. The same holdout scores every method. SPLIT must never see it."},
+      "reference_split_manifest": {"type": "string", "pathType": "dataset", "file": "**/*split_manifest.json", "title": "Reference split manifest", "description": "Frozen train/holdout membership and hashes."},
+      "reference_celltype_col": {"type": "string", "default": "cell_type", "title": "Reference cell-type column", "description": "obs column in the scRNA reference. Cell_Cluster_level1 for the lung reference; cell_type for cervical and ileum."},
+      "platform": {"type": "string", "enum": ["Xenium", "Xenium5K", "Atera", "CosMx", "MERFISH"], "title": "Platform", "description": "Recorded on every output row."},
+      "dataset_label": {"type": "string", "title": "Dataset label", "description": "e.g. xenium5k_cervical, atera_cervical, cosmx_nsclc, merfish_mouse_ileum."},
+      "roi_id": {"type": "string", "title": "Frozen ROI id", "description": "e.g. xenium5k_cervical__q50. Must match an entry in the frozen ROI manifest."},
+      "density_quantile": {"type": "string", "enum": ["q25", "q50", "q75", "whole_tissue"], "default": "q50", "title": "Density quantile", "description": "q50 is the primary comparison; q25/q75 are predefined density sensitivities, not tuning opportunities."},
+      "area_mm2": {"type": "number", "default": 0.25, "minimum": 0.0001, "title": "ROI area (mm2)", "description": "Physical area of the frozen window, used for entities per mm2. 0.25 for a 500 um square."},
+      "roi_manifest": {"type": "string", "pathType": "dataset", "file": "**/roi_manifest_frozen.json", "title": "Frozen ROI manifest", "description": "Copied verbatim into every result so the coordinates travel with the numbers."},
+      "max_retries": {"type": "integer", "minimum": 0, "maximum": 3, "default": 2, "title": "OOM/transient retries", "description": "Selected exits retry with attempt-scaled memory. Exit 1 is included because AWS Batch reports a container OOM as exit 1."},
+      "max_memory_gb": {"type": "integer", "minimum": 192, "maximum": 512, "default": 384, "title": "Retry memory cap (GiB)", "description": "Upper bound for large tasks. Raise for the Atera q75 ROI (3.34M transcripts)."}
+    },
+    "required": ["dataset_kind", "sample_name", "run_scope", "transcripts", "pmi", "reference_train", "reference_holdout", "reference_split_manifest", "platform", "dataset_label", "roi_id", "roi_manifest"]
+  },
+  "ui": {
+    "ui:order": ["dataset_kind", "sample_name", "run_scope", "seed", "platform", "dataset_label", "roi_id", "density_quantile", "area_mm2", "transcripts", "roi_manifest", "pmi", "reference_train", "reference_holdout", "reference_split_manifest", "reference_celltype_col", "max_retries", "max_memory_gb"]
+  }
+}

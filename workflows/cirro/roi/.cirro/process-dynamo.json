@@ -1,0 +1,15 @@
+{
+  "id": "segbench-roi-0-2-0-cirro",
+  "name": "SegBench - Frozen ROI imaging benchmark (Xenium5K / Atera / CosMx / MERFISH)",
+  "desc": "Six imaging methods on one preregistered fixed-physical-window ROI, held-out evaluation, density-normalised cost",
+  "executor": "NEXTFLOW",
+  "parentProcessIds": ["custom_dataset"],
+  "childProcessIds": [],
+  "documentationUrl": "https://github.com/imlong4real/SegBench/tree/feat/multiplatform-roi-benchmark/workflows/cirro",
+  "code": {
+    "repository": "GITHUBPUBLIC",
+    "uri": "imlong4real/SegBench",
+    "version": "1a3577282d855329480cb1ab77f025851b150791",
+    "script": "workflows/cirro/main.nf"
+  }
+}
