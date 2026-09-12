@@ -194,6 +194,7 @@ process SPLIT {
     path resource_runner
     val sample_name
     val seed
+    val celltype_col
     output:
     path 'split', emit: results
     script:
@@ -203,7 +204,7 @@ process SPLIT {
       --requested-cpus '${task.cpus}' --requested-memory-gb '${task.memory.toGiga()}' --method split -- \
       python -m segbench run split --transcripts '${prepared}/exact_transcripts.parquet' \
       --xenium-dir '${prepared}/exact_xenium_bundle' --reference-h5ad '${reference_train}' \
-      --reference-celltype-col Cell_Cluster_level1 --common-inputs '${prepared}/common_inputs' \
+      --reference-celltype-col '${celltype_col}' --common-inputs '${prepared}/common_inputs' \
       --outdir split --sample-name '${sample_name}' --seed '${seed}' --threads '${task.cpus}' \
       --umi-min 10 --counts-min 10 --overwrite
     """
@@ -433,18 +434,126 @@ process EVALUATE_KIDNEY {
     """
 }
 
+// ---------------------------------------------------------------------------
+// Frozen-ROI imaging branch (Xenium5K / Atera / CosMx / MERFISH).
+//
+// One frozen ROI parquet is the single source of truth for every method in a
+// run, so the transcript population is identical across the suite by
+// construction rather than by convention.  The bundle builder derives the
+// per-method views (Xenium-named transcripts, nucleus geometry, entity table,
+// count matrix, cluster labels) from that one file.
+// ---------------------------------------------------------------------------
+process PREP_ROI {
+    tag "${dataset_label}-${roi_id}"
+    label 'prep'
+    input:
+    path roi_transcripts
+    path reference_train
+    path bundle_script
+    path segger_bundle_script
+    path common_script
+    val dataset_label
+    val roi_id
+    val platform
+    val celltype_col
+    val seed
+    output:
+    path 'roi_prepared', emit: prepared
+    script:
+    """
+    mkdir -p roi_prepared/common_inputs
+    python '${bundle_script}' --transcripts '${roi_transcripts}' \
+      --outdir roi_prepared/exact_xenium_bundle --dataset '${dataset_label}' \
+      --platform '${platform}' --segger-bundle-script '${segger_bundle_script}' \
+      --seed '${seed}'
+    cp roi_prepared/exact_xenium_bundle/standardized_transcripts.parquet \
+       roi_prepared/exact_transcripts.parquet
+    # --min-qv 0: the population is already frozen upstream; a second QV floor
+    # here would silently put cellAdmix on a different molecule set, and the
+    # platforms without a qv column have no such field at all.
+    python '${common_script}' \
+      --xenium-dir roi_prepared/exact_xenium_bundle \
+      --scrna-h5ad '${reference_train}' \
+      --clusters roi_prepared/exact_xenium_bundle/clusters.csv \
+      --outdir roi_prepared/common_inputs \
+      --celltype-column '${celltype_col}' --min-qv 0
+    cp roi_prepared/exact_xenium_bundle/frozen_input_receipt.json \
+       roi_prepared/frozen_input_receipt.json
+    cp roi_prepared/exact_xenium_bundle/clusters.csv roi_prepared/clusters.csv
+    """
+}
+
+process EVALUATE_ROI {
+    tag "${dataset_label}-${roi_id}"
+    label 'evaluate'
+    publishDir params.outdir, mode: 'copy', overwrite: true
+    input:
+    path method_results
+    path reference_holdout
+    path pmi
+    path split_manifest
+    path roi_manifest
+    path frozen_manifest
+    path tidy_script
+    path segbench_src
+    path rctd_script
+    path input_receipt
+    val dataset_label
+    val roi_id
+    val platform
+    val density_quantile
+    val area_mm2
+    val celltype_col
+    val run_scope
+    val workflow_revision
+    output:
+    path 'benchmark_results', emit: results
+    script:
+    def methodDirs = method_results.collect { "'${it}'" }.join(' ')
+    """
+    mkdir -p benchmark_results/methods benchmark_results/evaluation
+    for d in ${methodDirs}; do cp -r "\$d" benchmark_results/methods/; done
+    export SEGBENCH_ENV_CONFIG=/opt/segbench/workflows/cirro/configs/environments.container.yaml
+    export PYTHONPATH='${segbench_src}'
+    export SEGBENCH_RCTD_SCRIPT='${rctd_script}'
+    export RETICULATE_PYTHON=/opt/conda/bin/python
+    /opt/conda/bin/Rscript -e 'cfg <- reticulate::py_config(); stopifnot(normalizePath(cfg\$python) == normalizePath(Sys.getenv("RETICULATE_PYTHON"))); cat(sprintf("reticulate_python=%s\\npython_version=%s\\n", cfg\$python, cfg\$version))' \
+      > benchmark_results/evaluation/rctd_environment_receipt.txt
+    python -m segbench evaluate benchmark_results/methods --dataset '${dataset_label}' \
+      --reference-h5ad '${reference_holdout}' --reference-celltype-col '${celltype_col}' \
+      --min-reference-cells 50 --rctd-reference-min-umi 10 \
+      --rctd-cores '${task.cpus}' --outdir benchmark_results/evaluation
+    python -c 'from pathlib import Path; logs=sorted(Path("benchmark_results/methods").glob("*/rctd/rctd.log")); print("\\n".join("===== " + str(p) + " =====\\n" + p.read_text(errors="replace") for p in logs), flush=True)'
+    python -c 'import pandas as pd; d=pd.read_csv("benchmark_results/evaluation/comparison_table.csv"); bad=d.loc[~d["rctd_status"].fillna("").astype(str).str.startswith("ok"), ["method", "rctd_status"]]; assert bad.empty, "RCTD gate failed:\\n" + bad.to_string(index=False)'
+    python '${tidy_script}' --comparison benchmark_results/evaluation/comparison_table.csv \
+      --methods-root benchmark_results/methods --dataset '${dataset_label}' --platform '${platform}' \
+      --replicate 1 --frozen-manifest '${frozen_manifest}' --split-manifest '${split_manifest}' \
+      --workflow-revision '${workflow_revision}' \
+      --roi '${roi_id}' --density-quantile '${density_quantile}' --area-mm2 '${area_mm2}' \
+      --roi-manifest '${roi_manifest}' \
+      --input-receipt '${input_receipt}' --pmi '${pmi}' --outdir benchmark_results/evaluation
+    python -c 'import json; m=json.load(open("benchmark_results/evaluation/benchmark_manifest.json")); v=str(m.get("workflow_revision", "")); assert v and v != "unknown", "workflow revision missing from benchmark manifest"'
+    cp '${roi_manifest}' benchmark_results/roi_manifest_frozen.json
+    cp '${input_receipt}' benchmark_results/frozen_input_receipt.json
+    cp '${split_manifest}' benchmark_results/evaluation/reference_split_manifest.json
+    """
+}
+
 workflow {
     requiredParam('dataset_kind', params.dataset_kind)
-    requiredParam('input_manifest', params.input_manifest)
     requiredParam('pmi', params.pmi)
     requiredParam('reference_holdout', params.reference_holdout)
-    if (!(params.dataset_kind in ['xenium_lung', 'kidney_visiumhd'])) error "--dataset_kind must be xenium_lung or kidney_visiumhd"
+    if (!(params.dataset_kind in ['xenium_lung', 'kidney_visiumhd', 'imaging_roi'])) error "--dataset_kind must be xenium_lung, kidney_visiumhd or imaging_roi"
     if (!(params.run_scope in ['smoke', 'full'])) error "--run_scope must be smoke or full"
 
     def inputDir = params.input_dir
     pmi_ch = Channel.fromPath(resolveDatasetPath(params.pmi, inputDir), checkIfExists: true)
     holdout_ch = Channel.fromPath(resolveDatasetPath(params.reference_holdout, inputDir), checkIfExists: true)
-    input_manifest_ch = Channel.fromPath(resolveDatasetPath(params.input_manifest, inputDir), checkIfExists: true)
+    // The frozen-ROI branch carries its own receipt (from the bundle builder)
+    // and the frozen ROI manifest, so it needs no separate input manifest.
+    if (params.dataset_kind != 'imaging_roi') requiredParam('input_manifest', params.input_manifest)
+    input_manifest_ch = params.dataset_kind == 'imaging_roi' ? Channel.empty()
+        : Channel.fromPath(resolveDatasetPath(params.input_manifest, inputDir), checkIfExists: true)
     frozen_manifest_ch = Channel.fromPath(file("${projectDir}/frozen_manifest.json"), checkIfExists: true)
     tidy_script_ch = Channel.fromPath(file("${projectDir}/bin/make_tidy_outputs.py"), checkIfExists: true)
     resource_script_ch = Channel.fromPath(file("${projectDir}/bin/run_with_resources.py"), checkIfExists: true)
@@ -475,7 +584,8 @@ workflow {
         STANDARDIZE_BAYSOR(PREP_XENIUM.out.prepared, BAYSOR.out.native_output, baysor_std_ch,
                            params.sample_name, params.seed)
         PROSEG(PREP_XENIUM.out.prepared, resource_script_ch, params.sample_name, params.seed)
-        SPLIT(PREP_XENIUM.out.prepared, train_ch, resource_script_ch, params.sample_name, params.seed)
+        SPLIT(PREP_XENIUM.out.prepared, train_ch, resource_script_ch, params.sample_name, params.seed,
+              'Cell_Cluster_level1')
         CELLADMIX(PREP_XENIUM.out.prepared, clusters_ch, resource_script_ch, params.sample_name, params.seed)
         TRACER_SEG(PREP_XENIUM.out.prepared.map{ it.resolve('exact_transcripts.parquet') }, pmi_ch,
                    segbench_src_ch, resource_script_ch, params.sample_name, params.seed)
@@ -496,6 +606,62 @@ workflow {
         EVALUATE_XENIUM(methods, holdout_ch, pmi_ch, split_manifest_ch, input_manifest_ch,
                         frozen_manifest_ch, tidy_script_ch, segbench_src_ch, rctd_script_ch,
                         params.sample_name, params.run_scope, workflow_revision)
+    } else if (params.dataset_kind == 'imaging_roi') {
+        // One frozen ROI, every applicable imaging method, identical input.
+        requiredParam('transcripts', params.transcripts)
+        requiredParam('reference_train', params.reference_train)
+        requiredParam('reference_split_manifest', params.reference_split_manifest)
+        requiredParam('reference_celltype_col', params.reference_celltype_col)
+        requiredParam('platform', params.platform)
+        requiredParam('dataset_label', params.dataset_label)
+        requiredParam('roi_id', params.roi_id)
+        requiredParam('roi_manifest', params.roi_manifest)
+        roi_tx_ch = Channel.fromPath(resolveDatasetPath(params.transcripts, inputDir), checkIfExists: true)
+        train_ch = Channel.fromPath(resolveDatasetPath(params.reference_train, inputDir), checkIfExists: true)
+        split_manifest_ch = Channel.fromPath(resolveDatasetPath(params.reference_split_manifest, inputDir), checkIfExists: true)
+        roi_manifest_ch = Channel.fromPath(resolveDatasetPath(params.roi_manifest, inputDir), checkIfExists: true)
+        bundle_script_ch = Channel.fromPath(file("${projectDir}/bin/make_roi_bundle.py"), checkIfExists: true)
+        segger_bundle_ch = Channel.fromPath(file("${projectDir}/../../workflow/scripts/_segmentation/prepare_roi_segger_bundle.py"), checkIfExists: true)
+        common_script_ch = Channel.fromPath(file("${projectDir}/../../workflow/scripts/_count_correction/prepare_tsu20_common_inputs.py"), checkIfExists: true)
+        baysor_prep_ch = Channel.fromPath(file("${projectDir}/bin/prepare_baysor.py"), checkIfExists: true)
+        baysor_std_ch = Channel.fromPath(file("${projectDir}/bin/standardize_baysor.py"), checkIfExists: true)
+        segger_cli_ch = Channel.fromPath(file("${projectDir}/bin/seeded_segger_cli.py"), checkIfExists: true)
+        segger_std_ch = Channel.fromPath(file("${projectDir}/bin/standardize_segger_v2.py"), checkIfExists: true)
+
+        PREP_ROI(roi_tx_ch, train_ch, bundle_script_ch, segger_bundle_ch, common_script_ch,
+                 params.dataset_label, params.roi_id, params.platform,
+                 params.reference_celltype_col, params.seed)
+        prepared = PREP_ROI.out.prepared
+
+        PREP_BAYSOR(prepared, baysor_prep_ch, params.sample_name)
+        BAYSOR(PREP_BAYSOR.out.input, params.sample_name)
+        STANDARDIZE_BAYSOR(prepared, BAYSOR.out.native_output, baysor_std_ch,
+                           params.sample_name, params.seed)
+        PROSEG(prepared, resource_script_ch, params.sample_name, params.seed)
+        SPLIT(prepared, train_ch, resource_script_ch, params.sample_name, params.seed,
+              params.reference_celltype_col)
+        CELLADMIX(prepared, prepared.map{ it.resolve('clusters.csv') }, resource_script_ch,
+                  params.sample_name, params.seed)
+        TRACER_SEG(prepared.map{ it.resolve('exact_transcripts.parquet') }, pmi_ch,
+                   segbench_src_ch, resource_script_ch, params.sample_name, params.seed)
+        // Same scheduling barrier as the lung graph: an unavailable GPU
+        // instance must not head-of-line block the CPU methods.
+        cpu_method_gate = STANDARDIZE_BAYSOR.out.results
+            .mix(PROSEG.out.results, SPLIT.out.results, CELLADMIX.out.results, TRACER_SEG.out.results)
+            .map { 1 }
+            .collect()
+        SEGGER(cpu_method_gate, prepared, segger_cli_ch, resource_script_ch,
+               params.sample_name, params.seed)
+        STANDARDIZE_SEGGER(prepared, SEGGER.out.native_output, segger_std_ch,
+                           params.sample_name, params.seed)
+        methods = STANDARDIZE_BAYSOR.out.results.mix(PROSEG.out.results, STANDARDIZE_SEGGER.out.results,
+                  SPLIT.out.results, CELLADMIX.out.results, TRACER_SEG.out.results).collect()
+        EVALUATE_ROI(methods, holdout_ch, pmi_ch, split_manifest_ch, roi_manifest_ch,
+                     frozen_manifest_ch, tidy_script_ch, segbench_src_ch, rctd_script_ch,
+                     prepared.map{ it.resolve('frozen_input_receipt.json') },
+                     params.dataset_label, params.roi_id, params.platform,
+                     params.density_quantile, params.area_mm2,
+                     params.reference_celltype_col, params.run_scope, workflow_revision)
     } else {
         requiredParam('kidney_seg_input', params.kidney_seg_input)
         requiredParam('visiumhd_matrix', params.visiumhd_matrix); requiredParam('spatial_dir', params.spatial_dir)

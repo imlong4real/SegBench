@@ -144,3 +144,12 @@ configs/local/
 # Per-machine environment resolution (copy from environments.local.example.sh)
 configs/environments.local.yaml
 configs/environments.local.sh
+
+# =============================================================================
+# Re-excluded: generated summaries that land inside the documentation trees
+# re-included above. Git applies the last matching pattern, so these must come
+# after the `!docs/**/*.md` rules to take effect. Hand-written README, audit
+# and method docs do not match `summary*` and stay tracked.
+# =============================================================================
+docs/**/summary*.md
+reproducibility/**/summary*.md
