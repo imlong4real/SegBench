@@ -68,6 +68,21 @@ def main() -> int:
     ledger = [r for r in ledger if r.get("run_scope") == a.run_scope]
     if not ledger:
         raise SystemExit(f"no {a.run_scope} runs in the ledger")
+    # An ROI can be relaunched (a resource fix, a transient queue failure); the
+    # most recent launch per ROI is the one that counts.  Superseded launches
+    # are kept in run_provenance so the history is not lost.
+    latest: dict[str, dict] = {}
+    superseded: list[dict] = []
+    for rec in sorted(ledger, key=lambda r: r["launched_utc"]):
+        prev = latest.get(rec["roi_id"])
+        if prev is not None:
+            superseded.append(prev)
+        latest[rec["roi_id"]] = rec
+    ledger = list(latest.values())
+    if superseded:
+        print(f"superseded by a later launch: "
+              + ", ".join(f"{r['roi_id']}({r['cirro_dataset_id'][:8]})" for r in superseded),
+              flush=True)
 
     dp = DataPortal()
     project = dp.get_project_by_id(PROJECT)
@@ -166,7 +181,8 @@ def main() -> int:
         {"schema_version": "roi-design-1.0",
          "collected_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
          "project": PROJECT, "run_scope": a.run_scope,
-         "runs": provenance}, indent=2) + "\n")
+         "runs": provenance,
+         "superseded_launches": superseded}, indent=2) + "\n")
     print(f"wrote {outdir/'run_provenance.json'}  ({len(provenance)} runs)")
     return 0
 
