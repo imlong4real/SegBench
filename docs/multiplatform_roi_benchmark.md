@@ -246,6 +246,18 @@ These are properties of the data and the design, not defects to be tuned away.
    and the entire delivered Petukhov molecule set. It is comparable in scale
    to the other platforms' ROIs but is not a density-matched selection.
 
+8. **MERFISH reference metrics rest on 3 of 6 cell types.** The evaluator's
+   `--min-reference-cells 50` floor — identical to the NSCLC and kidney runs,
+   and deliberately not relaxed for one dataset — drops Enteroendocrine (19
+   held-out cells), Paneth (41) and Tuft (16), leaving Enterocyte, Goblet and
+   Stem_TA. Those three sit on one differentiation axis and are
+   transcriptionally similar, so RCTD entropy, RCTD max weight, marker log2FC
+   and the pseudobulk correlations have less to discriminate on MERFISH than
+   on the other platforms, where every cell type clears the floor
+   (cervical 10/10, CosMx 9/9). Read MERFISH reference-concordance numbers as
+   a three-way problem, not a six-way one. This was determined from the frozen
+   split before any run, not from results.
+
 ---
 
 ## 8. Reproducing
