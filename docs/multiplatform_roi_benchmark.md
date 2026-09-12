@@ -186,6 +186,31 @@ cell-by-gene matrix and cluster labels.
 
 ---
 
+### Measured method feasibility at high plex
+
+The Atera panel (17,868 genes) is 3.8× Xenium5K, 18.6× CosMx and 74× MERFISH,
+and two methods hit hard resource limits there that they do not hit anywhere
+else. Measured on the *smallest* Atera ROI (q25, 1.93M transcripts):
+
+| Method | Request | Peak RSS | Outcome |
+|---|---:|---:|---|
+| cellAdmix attempt 1 | 160 GiB | 159.6 GiB | SIGKILL (OOM) after 3m53s |
+| cellAdmix attempt 2 | 320 GiB | 295.9 GiB | exit 1, R allocation failure, after 32m17s |
+| Baysor attempt 1 | 64 GiB | — | AWS Batch OOM, **no exit status reported** |
+
+Consequences, all of which are recorded rather than worked around:
+
+* Baysor's base allocation was raised 64 → 128 GiB, and a *null* exit status
+  now escalates memory like exit 1. AWS Batch reports a container OOM either
+  way, so matching on exit code alone silently mis-classified Baysor's failure
+  as non-retryable.
+* Atera runs are given a 512 GiB ceiling, so SPLIT/cellAdmix escalate
+  160 → 320 → 480 GiB. The ROI is **not** shrunk to make a method fit.
+* A method that still exhausts its retries is marked `not_applicable` for that
+  platform with its measured peak RSS and failure mode, and the remaining
+  methods and the held-out evaluation complete normally. Before this, one
+  method's terminal failure aborted the whole ROI and discarded the other five.
+
 ## 6. Evaluation
 
 The packaged suite already used for NSCLC Xenium and kidney VisiumHD:
