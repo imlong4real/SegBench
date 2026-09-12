@@ -213,6 +213,12 @@
       "title": "Reference cell-type column",
       "default": "cell_type",
       "description": "obs column in the scRNA reference."
+    },
+    "r_method_memory_gb": {
+      "type": "integer",
+      "default": 160,
+      "title": "R-method base memory (GB)",
+      "description": "Base memory for SPLIT / cellAdmix; multiplied by the attempt number. Raise for dense ROIs."
     }
   },
   "required": [

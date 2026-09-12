@@ -18,5 +18,6 @@
   "roi_manifest": "$.dataset.params.roi_manifest",
   "max_retries": "$.dataset.params.max_retries",
   "max_memory_gb": "$.dataset.params.max_memory_gb",
+  "r_method_memory_gb": "$.dataset.params.r_method_memory_gb",
   "outdir": "$.dataset.dataPath"
 }
