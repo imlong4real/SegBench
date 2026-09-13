@@ -25,7 +25,6 @@ import sys
 from pathlib import Path
 
 import pandas as pd
-from cirro import DataPortal
 
 PROJECT = "d57d7407-4c32-4256-bd2e-aa1e037569aa"
 CONTRACT = ["benchmark_stats.json", "config_receipt.json"]
@@ -69,17 +68,19 @@ def main() -> int:
     man = json.loads(Path(a.manifest).read_text())
     roi = man["datasets"][a.roi_key]["rois"][a.quantile]
 
-    dp = DataPortal()
-    project = dp.get_project_by_id(PROJECT)
-    ds = project.get_dataset_by_id(a.dataset_id)
-    if str(ds.status) != "COMPLETED":
-        print(f"run status is {ds.status}, not COMPLETED")
-        return 2
+    # cirro is imported only when a download is actually needed, so the gate
+    # can run in an interpreter that has pyarrow but not the Cirro SDK.
     dest = Path(a.cache) / a.dataset_id
-    if not (dest / ".downloaded").exists():
+    if not any(dest.rglob("benchmark_stats.json")):
+        from cirro import DataPortal
+        dp = DataPortal()
+        project = dp.get_project_by_id(PROJECT)
+        ds = project.get_dataset_by_id(a.dataset_id)
+        if str(ds.status) != "COMPLETED":
+            print(f"run status is {ds.status}, not COMPLETED")
+            return 2
         dest.mkdir(parents=True, exist_ok=True)
         ds.download_files(str(dest))
-        (dest / ".downloaded").write_text("ok\n")
 
     c = Checks()
     print(f"\n=== smoke gate: {a.roi_key} {a.quantile}  ({a.dataset_id}) ===")
@@ -95,7 +96,12 @@ def main() -> int:
           str(rec.get("filtering_applied", "")).startswith("none"),
           str(rec.get("filtering_applied")))
 
+    # The prepared bundle stays in the work directory; only benchmark_results
+    # is published.  Any method's standardized transcripts carry x/y in the
+    # input units, so the frozen window is checked against those instead.
     std = find(dest, "standardized_transcripts.parquet")
+    if not std:
+        std = [q for q in find(dest, "*_transcripts_standardized.parquet")]
     if std:
         d = pd.read_parquet(std[0], columns=["x", "y", "cell_id"])
         inb = (d.x.min() >= roi["xmin_um"] - 1e-6 and d.x.max() <= roi["xmax_um"] + 1e-6
@@ -104,13 +110,17 @@ def main() -> int:
               f"x[{d.x.min():.1f},{d.x.max():.1f}] y[{d.y.min():.1f},{d.y.max():.1f}] "
               f"vs x[{roi['xmin_um']:.1f},{roi['xmax_um']:.1f}] "
               f"y[{roi['ymin_um']:.1f},{roi['ymax_um']:.1f}]")
-        # 3. original-mask semantics
-        n_ent = d.loc[d.cell_id != "UNASSIGNED", "cell_id"].nunique()
-        c.add("original entity count == frozen",
-              n_ent == roi.get("n_original_entities", n_ent),
-              f"{n_ent} vs {roi.get('n_original_entities')}")
     else:
         c.add("coordinates inside the frozen window", False, "no standardized parquet")
+
+    # 3. original-mask semantics, from the frozen input receipt
+    c.add("original entity count == frozen",
+          rec.get("original_entity_count") == roi.get("n_original_entities"),
+          f"{rec.get('original_entity_count')} vs {roi.get('n_original_entities')}")
+    fa_rec, fa_roi = rec.get("frac_assigned"), roi.get("frac_assigned")
+    c.add("original-mask assigned fraction == frozen",
+          fa_rec is not None and fa_roi is not None and abs(fa_rec - fa_roi) < 1e-6,
+          f"{fa_rec} vs {fa_roi}")
 
     # 2. segmentation ids + 5. standardized outputs, per method
     methods_root = None
