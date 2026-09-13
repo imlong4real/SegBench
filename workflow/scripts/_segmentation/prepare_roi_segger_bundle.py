@@ -80,19 +80,25 @@ def build_nucleus_boundaries(
     min_nuc_tx: int,
     fallback_radius: float,
     circle_n_pts: int,
+    nucleus_only: bool = True,
 ) -> pd.DataFrame:
     """
-    Build nucleus_boundaries.parquet (cell_id, vertex_x, vertex_y) from
-    transcript positions where overlaps_nucleus == 1.
-    Falls back to a small circle for cells with fewer nucleus transcripts
-    than min_nuc_tx.
+    Build a boundary table (cell_id, vertex_x, vertex_y) from transcript
+    positions: the convex hull of a cell's nucleus molecules when
+    ``nucleus_only`` (nucleus_boundaries.parquet), or of ALL its molecules
+    otherwise (cell_boundaries.parquet).  Segger's Xenium preprocessor
+    requires both files to be present.
+
+    Falls back to a small circle for cells with fewer than ``min_nuc_tx``
+    contributing molecules.
     """
     all_cell_ids = df["cell_id"].astype(str).unique()
     all_cell_ids = [c for c in all_cell_ids
                     if c not in {"UNASSIGNED", "nan", "", "None", "0", "-1"}]
 
     # Group nucleus transcripts per cell
-    nuc_mask = (df["overlaps_nucleus"].fillna(0).astype(int) == 1)
+    nuc_mask = ((df["overlaps_nucleus"].fillna(0).astype(int) == 1) if nucleus_only
+                else pd.Series(True, index=df.index))
     nuc_df = df.loc[nuc_mask, ["cell_id", "x", "y"]].copy()
     nuc_df["cell_id"] = nuc_df["cell_id"].astype(str)
     nuc_by_cell = nuc_df.groupby("cell_id", observed=True)
@@ -206,6 +212,25 @@ def main() -> int:
           f"{n_cells_with_bounds:,} cells → {nb_path}")
 
     # ------------------------------------------------------------------
+    # 2b. Cell boundaries - Segger's Xenium validator requires exactly one
+    #     cell_boundaries.parquet as well as the nucleus file, and refuses to
+    #     infer the platform without it.  Derived the same way as the nucleus
+    #     hull, over all of a cell's molecules rather than its nuclear ones.
+    # ------------------------------------------------------------------
+    print("[bundle] Deriving cell boundaries from all assigned transcripts...")
+    cell_bounds = build_nucleus_boundaries(
+        df,
+        min_nuc_tx=args.min_nuc_transcripts,
+        fallback_radius=args.fallback_radius,
+        circle_n_pts=args.circle_n_pts,
+        nucleus_only=False,
+    )
+    cb_path = args.outdir / "cell_boundaries.parquet"
+    cell_bounds.to_parquet(cb_path, index=False)
+    print(f"[bundle] Wrote cell_boundaries.parquet: {len(cell_bounds):,} vertices, "
+          f"{cell_bounds['cell_id'].nunique():,} cells -> {cb_path}")
+
+    # ------------------------------------------------------------------
     # 3. experiment.xenium stub
     # ------------------------------------------------------------------
     n_cells = int(df["cell_id"].astype(str).replace("UNASSIGNED", pd.NA)
@@ -217,7 +242,16 @@ def main() -> int:
         "num_cells": n_cells,
         "pixel_size": 1.0,       # coordinates already in µm; Segger uses this for scaling
         "platform": platform,
-        "note": "Pseudo-bundle generated from roi_transcripts.parquet for Segger benchmarking",
+        # Segger parses analysis_sw_version to choose its Xenium schema and
+        # rejects anything below 2.0.0; without the key it cannot infer the
+        # platform at all and fails before reading a single transcript.
+        # 3.0.0.0 selects the v2+ schema, whose UNASSIGNED null-cell token is
+        # what this bundle writes, and keeps the v1 preprocessor (which
+        # requires major == 1) from matching too and making it ambiguous.
+        "analysis_sw_version": "xenium-3.0.0.0",
+        "note": "Pseudo-bundle generated from a frozen ROI parquet for Segger; "
+                "cell and nucleus boundaries are convex hulls of the molecules "
+                "themselves, not vendor polygons",
     }
     exp_path = args.outdir / "experiment.xenium"
     exp_path.write_text(json.dumps(exp, indent=2))
