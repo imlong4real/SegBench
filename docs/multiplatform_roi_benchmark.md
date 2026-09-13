@@ -307,3 +307,39 @@ workflow/scripts/_roi_design/filter_cpmi_by_genes.py ...
 workflow/scripts/_roi_design/launch_cirro_runs.py --run full --tier primary ...
 workflow/scripts/_roi_design/collect_results.py --ledger ... --outdir ...
 ```
+
+### Segger: why `--cells-min-counts 1`
+
+Segger v0.2.0 builds its reference AnnData with `cells_min_counts=10`, which
+drops cells below that threshold from `adata.obs`, but its segmentation graph
+then left-joins *every* transcript passing the segmentation mask against that
+table. Transcripts of a dropped cell therefore receive a **null**
+`cell_encoding`. The very next line fills nulls for `cell_cluster` and not for
+`cell_encoding`, so the null survives into
+`setup_segmentation_graph`, where Polars materialises the nullable column as
+`float64` with NaN and PyTorch refuses it as an index:
+
+```
+IndexError: tensors used as indices must be long, int, byte or bool tensors
+```
+
+Every platform here trips it, because the original mask always contains some
+small cells:
+
+| Platform | cells | with <10 transcripts | transcripts affected |
+|---|---:|---:|---:|
+| Atera q25 | 3,496 | 19 (0.5%) | 88 |
+| CosMx q25 | 1,022 | 15 (1.5%) | 61 |
+| Xenium5K q25 | 2,024 | 150 (7.4%) | 839 |
+| MERFISH whole | 7,722 | **2,405 (31.1%)** | 10,446 |
+
+MERFISH is worst because the Cellpose membrane prior produces many small
+partial cells.
+
+`--cells-min-counts 1` keeps every original-mask cell in the AnnData, so no
+transcript can join to a missing row. It is a compatibility setting, not a
+quality knob: it is applied identically on every platform, it was chosen before
+any Segger metric was seen, and it makes Segger's seed set exactly the original
+mask that SPLIT, cellAdmix and TRACER Seg also refine — the alternative
+(dropping small cells from the boundary tables) would have given Segger a
+different input population from every other method.
