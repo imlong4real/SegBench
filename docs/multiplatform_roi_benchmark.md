@@ -415,3 +415,46 @@ cell_id, so cell_id resolves only 38% of entities while tracer_id resolves 100%.
 Pseudobulk correlation and marker log2FC are deliberately not recomputed
 post-hoc — they aggregate across cells by predicted type, and reimplementing
 that would risk diverging from the packaged evaluator.
+
+### Segger: applicable on 8 of 10 ROIs, and why the other two are not
+
+Segger needed three separate fixes, each surfacing on a different platform —
+which is what made them separable:
+
+| Platform | Failure | Resolution |
+|---|---|---|
+| CosMx, MERFISH | null `cell_encoding` → `IndexError` on a float index | Segger-only bundle: `overlaps_nucleus` cleared where `cell_id` is UNASSIGNED |
+| Atera | DataLoader worker killed mid-training (host RAM) | memory base 96 → 192 GiB |
+| Xenium5K q25/q50 | `n_components=64 > min(n_samples, n_features)=58` | **not applicable** — see below |
+
+Segger filters genes at `genes_min_counts=100` inside `setup_anndata`, counted
+over nucleus-compartment transcripts only, and does **not** expose that
+threshold on its CLI. A 500 µm ROI is far smaller than the whole-tissue inputs
+that default assumes, so gene survival collapses:
+
+| ROI | nucleus tx | genes ≥100 counts | `dim=64` feasible |
+|---|---:|---:|---|
+| atera q25 / q50 / q75 | 1.07M / 1.18M / 1.60M | 3,022 / 3,489 / 4,740 | yes |
+| cosmx q25 / q50 / q75 | 181k / 262k / 301k | 356 / 534 / 503 | yes |
+| merfish whole | 175k | 112 | yes |
+| **xenium5k q25 / q50** | 52k / 59k | **41 / 58** | **no** |
+| xenium5k q75 | 101k | 141 | yes |
+
+The gene–gene correlation PCA requires `n_components ≤` surviving genes, so
+`node_representation_dim=64` fails on exactly those two ROIs. The 58 figure was
+computed from the frozen input *before* reading the error, and matches it
+exactly.
+
+**This is a density threshold, not a platform limit.** Segger is applicable to
+Xenium5K q75, where 141 genes survive. Xenium5K is the sparsest platform here
+(0.86M tx/mm²), so only its lower-density ROIs fall below the floor — which
+makes Segger's applicability itself a density-sensitivity result.
+
+`node_representation_dim` was **not** lowered to force a run. It is a
+model-capacity parameter frozen at 64 to match the NSCLC Xenium benchmark:
+changing it for one platform would break cross-platform comparability, and
+changing it everywhere would break comparability with the completed NSCLC and
+kidney campaigns. Raising gene survival instead would need `genes_min_counts`,
+which Segger v0.2.0 does not expose. The two ROIs are therefore recorded as
+`not_applicable` with the measured reason in
+`results/segbench_multiplatform_v1/method_applicability.json`.
