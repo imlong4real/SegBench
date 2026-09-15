@@ -446,6 +446,32 @@ def write_outputs(
                 df_post[label].astype(str).isin(UNASSIGNED_TOKENS), "unassigned", "whole")
     df_post.to_parquet(outputs / "transcripts_tracer_refined.parquet",
                        index=False, compression="snappy")
+
+    # Carry whole/partial through to the matrix the evaluator scores.  Without
+    # it every reference-concordance metric is computed on whole and partial
+    # entities pooled, and TRACER's partials are far smaller than its whole
+    # cells (median 35 vs 139 transcripts on CosMx q50), so pooling averages
+    # two populations with genuinely different fidelity into one number.
+    #
+    # The join key is `tracer_id`, not `cell_id`: a partial shares its parent's
+    # cell_id, so cell_id covers only 38% of entities while tracer_id covers
+    # 100%.
+    if "tracer_id" in df_post.columns and "whole_partial_status" in df_post.columns:
+        status = (df_post.drop_duplicates("tracer_id")
+                  .set_index(df_post.drop_duplicates("tracer_id")["tracer_id"].astype(str))
+                  ["whole_partial_status"].astype(str))
+        mapped = status.reindex(adata.obs_names.astype(str))
+        covered = int(mapped.notna().sum())
+        if covered < len(mapped):
+            log.warning("whole_partial_status covers %d/%d entities; the rest "
+                        "are labelled 'unknown'", covered, len(mapped))
+        adata.obs["whole_partial_status"] = mapped.fillna("unknown").to_numpy()
+        log.info("whole_partial_status on the cell-by-gene matrix: %s",
+                 adata.obs["whole_partial_status"].value_counts().to_dict())
+    else:
+        log.warning("df_post lacks tracer_id/whole_partial_status; the "
+                    "cell-by-gene matrix will not carry the whole/partial split")
+
     adata.write_h5ad(outputs / "cell_by_gene_tracer.h5ad")
     scores.to_csv(outputs / "cell_scores.tsv.gz", sep="\t", index=False,
                   compression="gzip")
