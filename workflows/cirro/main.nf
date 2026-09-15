@@ -148,6 +148,7 @@ process SEGGER {
     path prepared
     path seeded_cli
     path resource_runner
+    path segger_input_script
     val sample_name
     val seed
     output:
@@ -155,11 +156,14 @@ process SEGGER {
     script:
     """
     mkdir -p segger_native/output
+    # Segger-only compartment correction; the shared bundle is untouched.
+    python '${segger_input_script}' --bundle '${prepared}/exact_xenium_bundle' \
+      --outdir segger_input --receipt segger_native/segger_input_receipt.json
     python '${resource_runner}' --output segger_native/resource_usage.json \
       --log segger_native/run.log --requested-cpus '${task.cpus}' \
       --requested-memory-gb '${task.memory.toGiga()}' --requested-gpus 1 --method segger -- \
       python '${seeded_cli}' --seed '${seed}' -- segment \
-      -i '${prepared}/exact_xenium_bundle' -o segger_native/output \
+      -i segger_input -o segger_native/output \
       --node-representation-dim 64 --n-epochs 20 --save-anndata \
       --cells-min-counts 1
     test -s segger_native/output/segger_segmentation.parquet
@@ -577,6 +581,7 @@ workflow {
         baysor_std_ch = Channel.fromPath(file("${projectDir}/bin/standardize_baysor.py"), checkIfExists: true)
         segger_cli_ch = Channel.fromPath(file("${projectDir}/bin/seeded_segger_cli.py"), checkIfExists: true)
         segger_std_ch = Channel.fromPath(file("${projectDir}/bin/standardize_segger_v2.py"), checkIfExists: true)
+        segger_input_ch = Channel.fromPath(file("${projectDir}/bin/prepare_segger_input.py"), checkIfExists: true)
 
         PREP_XENIUM(transcripts_ch, xenium_ch, clusters_ch, train_ch, exact_script_ch,
                     common_script_ch, params.sample_name, params.run_scope, params.smoke_xenium_transcripts)
@@ -599,7 +604,7 @@ workflow {
             .map { 1 }
             .collect()
         SEGGER(cpu_method_gate, PREP_XENIUM.out.prepared, segger_cli_ch, resource_script_ch,
-               params.sample_name, params.seed)
+               segger_input_ch, params.sample_name, params.seed)
         STANDARDIZE_SEGGER(PREP_XENIUM.out.prepared, SEGGER.out.native_output, segger_std_ch,
                            params.sample_name, params.seed)
         methods = STANDARDIZE_BAYSOR.out.results.mix(PROSEG.out.results, STANDARDIZE_SEGGER.out.results,
@@ -628,6 +633,7 @@ workflow {
         baysor_std_ch = Channel.fromPath(file("${projectDir}/bin/standardize_baysor.py"), checkIfExists: true)
         segger_cli_ch = Channel.fromPath(file("${projectDir}/bin/seeded_segger_cli.py"), checkIfExists: true)
         segger_std_ch = Channel.fromPath(file("${projectDir}/bin/standardize_segger_v2.py"), checkIfExists: true)
+        segger_input_ch = Channel.fromPath(file("${projectDir}/bin/prepare_segger_input.py"), checkIfExists: true)
 
         PREP_ROI(roi_tx_ch, train_ch, bundle_script_ch, segger_bundle_ch, common_script_ch,
                  params.dataset_label, params.roi_id, params.platform,
@@ -652,7 +658,7 @@ workflow {
             .map { 1 }
             .collect()
         SEGGER(cpu_method_gate, prepared, segger_cli_ch, resource_script_ch,
-               params.sample_name, params.seed)
+               segger_input_ch, params.sample_name, params.seed)
         STANDARDIZE_SEGGER(prepared, SEGGER.out.native_output, segger_std_ch,
                            params.sample_name, params.seed)
         methods = STANDARDIZE_BAYSOR.out.results.mix(PROSEG.out.results, STANDARDIZE_SEGGER.out.results,
