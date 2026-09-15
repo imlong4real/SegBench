@@ -90,13 +90,22 @@ def main() -> None:
     # the tissue as much as the method.
     derived=[]
     wide_by_method={str(r.method): r for _, r in wide.iterrows()}
+    # The comparison table and resource_usage.json do not always spell a method
+    # the same way (TRACER is "tracer" in one and "tracer_seg" in the other).
+    # Left unreconciled this splits TRACER across two rows and silently drops
+    # its entities_per_mm2.
+    def _canon(name: str):
+        n = str(name)
+        for cand in (n, n.replace("_seg", ""), n + "_seg"):
+            if cand in wide_by_method:
+                return cand, wide_by_method[cand]
+        return n, None
     for method_dir in sorted(q.parent for q in args.methods_root.rglob("benchmark_stats.json")):
         rp=method_dir/"resource_usage.json"
         if not rp.exists(): continue
         res=json.loads(rp.read_text()); host=res.get("host",{})
-        method=res.get("method",method_dir.name)
+        method, wrow = _canon(res.get("method", method_dir.name))
         wall=res.get("wall_clock_seconds"); rss=host.get("peak_rss_gb")
-        wrow=wide_by_method.get(method)
         n_ent=(wrow.get("n_entities") if wrow is not None else None)
         per_m = (input_tx/1e6) if input_tx else None
         def add(metric, value, u, prov):
@@ -113,6 +122,15 @@ def main() -> None:
         add("peak_rss_gb_per_1m_transcripts",
             (rss/per_m) if (rss is not None and per_m) else None,
             "GiB per 1M transcripts","derived: host peak RSS / frozen input population")
+        # peak_rss is the SUM of live process-tree RSS, so shared pages are
+        # counted once per forked worker.  A value above the container's own
+        # allocation is therefore provably an over-count, not real usage, and
+        # must not be read as a memory requirement.
+        req=host.get("memory_requested_gb")
+        if rss is not None and req:
+            add("peak_rss_exceeds_request", 1.0 if rss > req else 0.0, "boolean",
+                f"derived: peak RSS {rss:.1f} GiB vs {req} GiB requested; "
+                f"peak_rss sums process-tree RSS and double-counts shared pages")
         add("entities_per_mm2",
             (float(n_ent)/args.area_mm2) if (n_ent is not None and not pd.isna(n_ent)
                                              and args.area_mm2) else None,

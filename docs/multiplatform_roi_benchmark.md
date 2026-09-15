@@ -343,3 +343,23 @@ any Segger metric was seen, and it makes Segger's seed set exactly the original
 mask that SPLIT, cellAdmix and TRACER Seg also refine — the alternative
 (dropping small cells from the boundary tables) would have given Segger a
 different input population from every other method.
+
+### Reading `peak_rss_gb`
+
+`run_with_resources.py` records **the sum of live process-tree RSS**, sampled
+each second. Shared pages are therefore counted once per forked worker, so the
+figure overstates real memory for any multi-process method — and for a method
+that forks heavily it can exceed the container's own allocation, which is proof
+the number is an over-count rather than a requirement.
+
+Baysor on Atera q50 reports **685 GiB** against a container capped well below
+that. Read it as "Baysor forks many workers over a 17,868-gene panel", not as a
+685 GiB requirement. The tidy tables carry `peak_rss_exceeds_request` (1/0) so
+these rows are visible rather than silently trusted, and
+`peak_rss_gb_per_1m_transcripts` inherits the same caveat.
+
+The metric is deliberately **not** changed mid-campaign: the frozen NSCLC Xenium
+and kidney VisiumHD runs used the same summed definition, and switching to PSS
+or max-single-process now would make this campaign incomparable with them.
+Sound cross-method comparison here should lean on `cpu_time_seconds` and
+wall-clock runtime, which are not affected.
