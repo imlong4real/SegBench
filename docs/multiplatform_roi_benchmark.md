@@ -363,3 +363,55 @@ and kidney VisiumHD runs used the same summed definition, and switching to PSS
 or max-single-process now would make this campaign incomparable with them.
 Sound cross-method comparison here should lean on `cpu_time_seconds` and
 wall-clock runtime, which are not affected.
+
+### TRACER: whole cells and partials are reported separately
+
+TRACER emits two kinds of entity — a whole cell, and a partial fragment it
+could not stitch — and they are not one population. Partials carry far fewer
+transcripts (CosMx q50: median 35 against a whole cell's 139) and score very
+differently, so a single pooled number averages two distributions, weighted by
+whichever is more numerous. Partials are 60% of TRACER entities on Atera, 62%
+on CosMx and 31% on MERFISH.
+
+Measured at q50:
+
+| ROI | metric | whole | partial | pooled (previously reported) |
+|---|---|---:|---:|---:|
+| Atera | RCTD entropy | **0.0167** | 0.6860 | 0.2609 |
+| Atera | RCTD max weight | 0.9982 | 0.7259 | 0.9420 |
+| CosMx | RCTD entropy | 0.2089 | 0.6844 | 0.4883 |
+| CosMx | RCTD max weight | 0.9532 | 0.7216 | 0.8407 |
+| MERFISH | RCTD entropy | 0.1613 | 0.2677 | 0.2009 |
+| MERFISH | RCTD max weight | 0.9644 | 0.9298 | 0.9529 |
+
+cPMI purity and conflict move the same way on every platform (whole: higher
+purity, lower conflict).
+
+**Pooling can change the ranking, not just the value.** On MERFISH the pooled
+TRACER entropy (0.201) is worse than SPLIT (0.182), while TRACER's whole cells
+(0.161) are better than SPLIT. On Atera the pooled figure is roughly 16× the
+whole-cell value.
+
+**This is not a like-for-like cross-method comparison.** Baysor, ProSeg and
+cellAdmix have no whole/partial distinction — every entity they emit is a whole
+cell by construction. TRACER-whole is a subset *TRACER itself selected*, so part
+of its advantage on that subset is selection, not segmentation quality. Read the
+split as "TRACER's whole cells against its own partials". The pooled row is
+retained alongside, because it is the only TRACER figure directly comparable to
+the other methods.
+
+Two mechanisms deliver this:
+
+* `src/segbench/methods/tracer.py` writes `whole_partial_status` into
+  `cell_by_gene_tracer.h5ad`, so runs from that revision onward can be
+  stratified natively by the packaged evaluator.
+* `workflow/scripts/_roi_design/stratify_tracer_entities.py` recomputes the
+  exactly-recoverable metrics (RCTD entropy/max weight from the published
+  per-cell weights, cPMI purity/conflict from `cell_scores.tsv.gz`) for runs
+  that predate it, without re-running anything.
+
+Both join on **`tracer_id`**, never `cell_id`: a partial shares its parent's
+cell_id, so cell_id resolves only 38% of entities while tracer_id resolves 100%.
+Pseudobulk correlation and marker log2FC are deliberately not recomputed
+post-hoc — they aggregate across cells by predicted type, and reimplementing
+that would risk diverging from the packaged evaluator.
