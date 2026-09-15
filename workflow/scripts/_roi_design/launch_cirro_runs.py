@@ -20,6 +20,11 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parent))
+from cirro_preflight import require_credentials as _require_credentials
+_require_credentials()   # fail fast rather than block on a browser login
 from cirro import DataPortal
 
 PROJECT = "d57d7407-4c32-4256-bd2e-aa1e037569aa"          # BTC-DST-Development
