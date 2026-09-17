@@ -418,13 +418,13 @@ that would risk diverging from the packaged evaluator.
 
 ### Segger: applicable on 8 of 10 ROIs, and why the other two are not
 
-Segger needed three separate fixes, each surfacing on a different platform —
+Segger needed three separate compatibility decisions, each surfacing on a different platform —
 which is what made them separable:
 
 | Platform | Failure | Resolution |
 |---|---|---|
 | CosMx, MERFISH | null `cell_encoding` → `IndexError` on a float index | Segger-only bundle: `overlaps_nucleus` cleared where `cell_id` is UNASSIGNED |
-| Atera | DataLoader worker killed mid-training (host RAM) | memory base 96 → 192 GiB |
+| Atera | DataLoader workers SIGBUS in Docker `/dev/shm`; unchanged at 96/192/288 GiB host RAM | force the hidden v0.2.0 `num_workers` setting to 0 in the Cirro launcher; keep the schedulable 96 GiB host request |
 | Xenium5K q25/q50 | `n_components=64 > min(n_samples, n_features)=58` | **not applicable** — see below |
 
 Segger filters genes at `genes_min_counts=100` inside `setup_anndata`, counted

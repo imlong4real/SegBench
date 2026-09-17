@@ -162,7 +162,7 @@ process SEGGER {
     python '${resource_runner}' --output segger_native/resource_usage.json \
       --log segger_native/run.log --requested-cpus '${task.cpus}' \
       --requested-memory-gb '${task.memory.toGiga()}' --requested-gpus 1 --method segger -- \
-      python '${seeded_cli}' --seed '${seed}' -- segment \
+      python '${seeded_cli}' --seed '${seed}' --num-workers 0 -- segment \
       -i segger_input -o segger_native/output \
       --node-representation-dim 64 --n-epochs 20 --save-anndata \
       --cells-min-counts 1
@@ -185,7 +185,8 @@ process STANDARDIZE_SEGGER {
     """
     python '${standardizer}' --transcripts '${prepared}/exact_transcripts.parquet' \
       --segger-output '${native_dir}/output' --resource-usage '${native_dir}/resource_usage.json' \
-      --outdir segger --sample-name '${sample_name}' --seed '${seed}'
+      --outdir segger --sample-name '${sample_name}' --seed '${seed}' --num-workers 0 \
+      --input-receipt '${native_dir}/segger_input_receipt.json'
     cp '${native_dir}/run.log' segger/run.log
     """
 }

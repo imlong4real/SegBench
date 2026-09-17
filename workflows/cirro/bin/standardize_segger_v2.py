@@ -28,6 +28,8 @@ def main() -> None:
     parser.add_argument("--outdir", type=Path, required=True)
     parser.add_argument("--sample-name", required=True)
     parser.add_argument("--seed", type=int, required=True)
+    parser.add_argument("--num-workers", type=int, required=True)
+    parser.add_argument("--input-receipt", type=Path, required=True)
     args = parser.parse_args()
     outputs = args.outdir / "outputs"; native = args.outdir / "native"
     outputs.mkdir(parents=True, exist_ok=True); native.mkdir(parents=True, exist_ok=True)
@@ -65,6 +67,7 @@ def main() -> None:
     if native_h5ad.exists():
         shutil.copy2(native_h5ad, native / native_h5ad.name)
     shutil.copy2(args.resource_usage, args.outdir / "resource_usage.json")
+    shutil.copy2(args.input_receipt, args.outdir / "segger_input_receipt.json")
     resources = json.loads(args.resource_usage.read_text())
     assigned = ~result.cell_id.eq("UNASSIGNED")
     stats = {
@@ -93,7 +96,11 @@ def main() -> None:
     receipt = {
         "method": "Segger", "version": "0.2.0",
         "commit": "ca7bf1caaf9a177dd1f3f9051f020d2e7d3937ac",
-        "seed": args.seed, "n_epochs": 20, "configuration": "upstream v0.2.0 defaults",
+        "seed": args.seed, "n_epochs": 20,
+        "configuration": "upstream v0.2.0 defaults except DataLoader num_workers",
+        "num_workers": args.num_workers,
+        "num_workers_reason": "0 avoids Docker /dev/shm SIGBUS on Cirro",
+        "input_adapter_receipt": "segger_input_receipt.json",
         "input_sha256": sha256(args.transcripts), "output_sha256": sha256(std),
     }
     (args.outdir / "config_receipt.json").write_text(json.dumps(receipt, indent=2) + "\n")
