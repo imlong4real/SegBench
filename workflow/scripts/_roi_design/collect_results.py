@@ -40,6 +40,9 @@ PER_RUN_TABLES = ["benchmark_summary.tsv", "resource_usage.tsv", "entity_summary
                   "marker_specificity.tsv", "tracer_qc.tsv", "plot_ready_table.tsv"]
 PLOT_COLS = ["dataset", "platform", "ROI", "density_quantile", "area_mm2",
              "input_tx", "method", "metric", "value", "unit"]
+#: The six imaging methods the campaign benchmarks, named as the evaluator
+#: canonicalises them (TRACER Seg reports as "tracer").
+EXPECTED_METHODS = ["baysor", "celladmix", "proseg", "segger", "split", "tracer"]
 
 
 def download(ds, dest: Path) -> Path:
@@ -67,6 +70,14 @@ def main() -> int:
                     help="Only collect runs launched with this scope.")
     ap.add_argument("--allow-incomplete", action="store_true",
                     help="Collect whatever has completed instead of failing.")
+    ap.add_argument("--applicability", default=None,
+                    help="method_applicability.json. Supplies the recorded "
+                         "reason for a method that legitimately cannot run on "
+                         "an ROI; an absent method with no recorded reason is "
+                         "an error, not an NA.")
+    ap.add_argument("--allow-unexplained-gaps", action="store_true",
+                    help="Report methods that produced no output and have no "
+                         "recorded reason instead of exiting non-zero.")
     a = ap.parse_args()
 
     ledger = [json.loads(l) for l in Path(a.ledger).read_text().splitlines() if l.strip()]
@@ -168,6 +179,12 @@ def main() -> int:
         print(f"wrote {outdir/t}  ({len(df):,} rows)")
 
     # Methods that produced no row for an ROI are reported, not silently absent.
+    # Two distinct cases reach this table and they must not be conflated:
+    #   * a method that ran and emitted an explicit applicable=false metric, and
+    #   * a method that emitted nothing at all for the ROI.
+    # The second case is the one that used to disappear: it contributes no row
+    # to benchmark_summary.tsv, so scanning that table alone could never see it,
+    # and the method silently vanished from the ROI instead of being reported.
     na_rows = []
     summ = outdir / "benchmark_summary.tsv"
     if summ.exists():
@@ -177,10 +194,49 @@ def main() -> int:
             for _, r in na.iterrows():
                 na_rows.append({"dataset": r.get("dataset"), "platform": r.get("platform"),
                                 "ROI": r.get("ROI"), "method": r.get("method"),
-                                "metric": r.get("metric"),
-                                "reason": r.get("provenance")})
+                                "metric": r.get("metric"), "kind": "metric_not_applicable",
+                                "reason": r.get("provenance"), "reason_source": "run output"})
+
+    recorded = {}
+    if a.applicability:
+        app = json.loads(Path(a.applicability).read_text())
+        for e in app.get("not_applicable", []):
+            for roi in e.get("rois", []):
+                recorded[(e["method"], roi)] = e.get("reason", "")
+
+    unexplained = []
+    plot = outdir / "plot_ready_table.tsv"
+    if plot.exists():
+        pr = pd.read_csv(plot, sep="\t")
+        produced = {(str(r.ROI), str(r.method)) for r in pr.itertuples()}
+        for rec in sorted(ledger, key=lambda r: r["roi_id"]):
+            roi = rec["roi_id"]
+            if not any(roi == p_roi for p_roi, _ in produced):
+                continue          # ROI not collected at all; already in `missing`
+            for method in EXPECTED_METHODS:
+                if (roi, method) in produced:
+                    continue
+                reason = recorded.get((method, roi))
+                na_rows.append({"dataset": rec["dataset_key"], "platform": rec["platform"],
+                                "ROI": roi, "method": method, "metric": "ALL",
+                                "kind": "method_produced_no_output",
+                                "reason": reason or "NOT RECORDED - method produced no "
+                                                    "output and no reason is on file",
+                                "reason_source": ("method_applicability.json" if reason
+                                                  else "none")})
+                if not reason:
+                    unexplained.append((roi, method))
+
     pd.DataFrame(na_rows).to_csv(outdir / "not_applicable.tsv", sep="\t", index=False)
     print(f"wrote {outdir/'not_applicable.tsv'}  ({len(na_rows):,} rows)")
+    if unexplained:
+        print("METHODS WITH NO OUTPUT AND NO RECORDED REASON:", flush=True)
+        for roi, method in unexplained:
+            print(f"    {roi:34s} {method}", flush=True)
+        if not a.allow_unexplained_gaps:
+            raise SystemExit("refusing to publish a benchmark whose gaps are "
+                             "undocumented; record each in method_applicability.json "
+                             "or rerun the method")
 
     (outdir / "run_provenance.json").write_text(json.dumps(
         {"schema_version": "roi-design-1.0",

@@ -64,6 +64,12 @@ def main() -> int:
                          "Atera: cellAdmix peaked at 159.6 GiB against a 160 GiB "
                          "first attempt on Atera q25 (1.93M tx), so the denser "
                          "Atera ROIs need room to escalate.")
+    ap.add_argument("--max-retries", type=int, default=2, choices=[0, 1, 2, 3],
+                    help="Attempt budget for method processes. The registered "
+                         "process scales memory as min(base * attempt, "
+                         "max_memory_gb), so the attempt count is the only knob "
+                         "that reaches the 512 GiB ceiling for cellAdmix "
+                         "(base 160): 2 retries stop at 480 GiB, 3 reach 512.")
     ap.add_argument("--dry-run", action="store_true")
     a = ap.parse_args()
 
@@ -114,7 +120,7 @@ def main() -> int:
             "density_quantile": "whole_tissue" if q == "whole" else q,
             "area_mm2": float(area),
             "roi_manifest": "roi_manifest_frozen.json",
-            "max_retries": 2,
+            "max_retries": a.max_retries,
             # The registered process scales SPLIT/cellAdmix memory as
             # min(160 * attempt, max_memory_gb).  cellAdmix was SIGKILLed at
             # 159.6 GiB against the 160 GiB first attempt on Atera q25
